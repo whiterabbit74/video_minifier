@@ -119,6 +119,9 @@ struct VideoSzhimakaApp: App {
             let itemSettings = NSMenuItem(title: "Настройки", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
             itemSettings.target = AppDelegate.shared
             menu.addItem(itemSettings)
+            let itemAbout = NSMenuItem(title: "О программе", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
+            itemAbout.target = AppDelegate.shared
+            menu.addItem(itemAbout)
             menu.addItem(NSMenuItem.separator())
             let itemQuit = NSMenuItem(title: "Выйти", action: #selector(AppDelegate.quit), keyEquivalent: "q")
             itemQuit.target = AppDelegate.shared
@@ -142,6 +145,7 @@ struct VideoSzhimakaApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     static let shared = AppDelegate()
     var statusItem: NSStatusItem?
+    private var aboutWindow: NSWindow?
     
     @objc func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
@@ -152,6 +156,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         showMainWindow()
         // Post notification to show settings
         NotificationCenter.default.post(name: .showSettings, object: nil)
+    }
+    
+    @objc func showAbout() {
+        if let aboutWindow = aboutWindow {
+            aboutWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        let hostingView = NSHostingView(rootView: AboutView())
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 360),
+                              styleMask: [.titled, .closable, .miniaturizable],
+                              backing: .buffered,
+                              defer: false)
+        window.center()
+        window.title = "О программе"
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+        
+        self.aboutWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            self?.aboutWindow = nil
+        }
     }
     
     @objc func quit() {
