@@ -10,6 +10,7 @@ struct ContentView: View {
 struct MainView: View {
     @EnvironmentObject private var settingsService: SettingsService
     @StateObject private var viewModel: MainViewModel
+    @AppStorage("appTheme") private var appTheme: String = "dark" // "light" or "dark"
     
     init() {
         // Create viewModel with default services - will be updated in onAppear
@@ -61,12 +62,14 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
             viewModel.showSettings = true
         }
+        .preferredColorScheme(appTheme == "light" ? .light : .dark)
 
     }
 }
 
 struct HeaderView: View {
     @ObservedObject var viewModel: MainViewModel
+    @AppStorage("appTheme") private var appTheme: String = "dark"
     
     var body: some View {
         HStack {
@@ -86,6 +89,15 @@ struct HeaderView: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                
+                // Theme toggle button (left of settings)
+                Button(action: {
+                    appTheme = (appTheme == "light") ? "dark" : "light"
+                }) {
+                    Image(systemName: appTheme == "light" ? "sun.max.fill" : "moon.fill")
+                }
+                .buttonStyle(.bordered)
+                .help("Переключить тему")
                 
                 Button(action: {
                     viewModel.showSettings = true
@@ -138,15 +150,13 @@ struct EmptyStateView: View {
                     .fontWeight(.medium)
                 
                 Text("или нажмите кнопку \"Добавить файлы\"")
-                    .font(.body)
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
-            Text("Поддерживаются форматы: MP4, MOV, MKV, AVI, WebM")
-                .font(.caption)
-                .foregroundColor(Color.adaptiveTertiary)
         }
+        .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentBackground()
     }
 }
 

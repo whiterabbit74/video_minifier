@@ -387,10 +387,25 @@ class MainViewModel: ObservableObject {
             loggingService.info("Сжатие завершено: \(file.name) (\(file.originalSize.formattedFileSize) → \(compressedSize.formattedFileSize), экономия: \(String(format: "%.1f", compressionRatio))%)", category: "Compression")
             loggingService.info("Производительность: CPU \(String(format: "%.1f", finalMetrics.cpuUsage))%, Память \(String(format: "%.1f", finalMetrics.memoryUsage))MB, Температура: \(finalMetrics.thermalState.description)", category: "Performance")
             
-            // Delete original file if requested
+            // If compressed file is larger than original, delete the compressed file immediately
+            let isCompressedLarger = compressedSize > file.originalSize
+            if isCompressedLarger {
+                do {
+                    try fileManagerService.deleteFile(at: outputURL)
+                    loggingService.warning("Сжатый файл больше оригинала, удаляю сжатую версию: \(outputURL.lastPathComponent)", category: "FileManagement")
+                } catch {
+                    loggingService.error("Не удалось удалить сжатый файл: \(outputURL.lastPathComponent): \(error.localizedDescription)", category: "FileManagement")
+                }
+            }
+            
+            // Delete original file if requested, but only when compressed is not larger
             if settingsService.settings.deleteOriginals {
-                try fileManagerService.deleteFile(at: file.url)
-                loggingService.info("Оригинальный файл удален: \(file.name)", category: "FileManagement")
+                if !isCompressedLarger {
+                    try fileManagerService.deleteFile(at: file.url)
+                    loggingService.info("Оригинальный файл удален: \(file.name)", category: "FileManagement")
+                } else {
+                    loggingService.info("Оригинал НЕ удален, так как сжатый файл оказался больше", category: "FileManagement")
+                }
             }
             
         } catch is CancellationError {
