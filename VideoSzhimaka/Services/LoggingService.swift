@@ -64,7 +64,7 @@ class LoggingService: LoggingServiceProtocol {
     init() {
         // Создаем URL для файла логов в папке Application Support
         let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, 
-                                                   in: .userDomainMask).first!
+                                                   in: .userDomainMask).first ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         let appDirectory = appSupportURL.appendingPathComponent("VideoSzhimaka")
         
         // Создаем папку если её нет
