@@ -658,7 +658,8 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                 process.terminationHandler = { [weak self] terminatedProcess in
                     guard let self = self else { return }
                     let exitCode = terminatedProcess.terminationStatus
-                    self.logger.info("FFmpeg process terminated with status: \(exitCode)")
+                    let reason = terminatedProcess.terminationReason
+                    self.logger.info("FFmpeg process terminated with status: \(exitCode), reason: \(String(describing: reason))")
 
                     // Проверяем, была ли операция отменена
                     if self.currentProcess == nil {
@@ -667,25 +668,26 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                         return
                     }
 
+                    // Если процесс завершен сигналом (SIGTERM/SIGKILL) — трактуем как отмену
+                    if reason == .uncaughtSignal && (exitCode == 15 || exitCode == 9) {
+                        self.logger.info("FFmpeg terminated by signal (treated as cancellation)")
+                        safeContinuation(.failure(VideoCompressionError.cancelled))
+                        return
+                    }
+
                     // Обрабатываем различные коды завершения
                     switch exitCode {
                     case 0:
                         safeContinuation(.success(()))
-                    case 255, -15:
-                        self.logger.info("FFmpeg terminated with SIGTERM (user cancellation)")
-                        safeContinuation(.failure(VideoCompressionError.cancelled))
-                    case -9:
-                        self.logger.info("FFmpeg terminated with SIGKILL")
-                        safeContinuation(.failure(VideoCompressionError.cancelled))
                     case 1:
-                        let errorMessage = "FFmpeg general error (exit code 1)"
-                        safeContinuation(.failure(VideoCompressionError.compressionFailed(errorMessage)))
+                        safeContinuation(.failure(VideoCompressionError.compressionFailed("FFmpeg general error (exit code 1)")))
                     case 2:
-                        let errorMessage = "FFmpeg invalid arguments (exit code 2)"
-                        safeContinuation(.failure(VideoCompressionError.invalidInput(errorMessage)))
+                        safeContinuation(.failure(VideoCompressionError.invalidInput("FFmpeg invalid arguments (exit code 2)")))
+                    case 255:
+                        // Часто FFmpeg возвращает 255 при SIGTERM; если это не отмена — считаем ошибкой
+                        safeContinuation(.failure(VideoCompressionError.compressionFailed("FFmpeg process failed with exit code: 255")))
                     default:
-                        let errorMessage = "FFmpeg process failed with exit code: \(exitCode)"
-                        safeContinuation(.failure(VideoCompressionError.compressionFailed(errorMessage)))
+                        safeContinuation(.failure(VideoCompressionError.compressionFailed("FFmpeg process failed with exit code: \(exitCode)")))
                     }
                 }
 
@@ -854,15 +856,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         // Безопасная финальная проверка прогресса
         // Проверяем только если мониторинг завершился естественным образом
         if isMonitoringActive && currentProcess != nil && !processReference.isRunning {
-            // Безопасная проверка статуса завершения
-            let terminationStatus: Int32
-            do {
-                terminationStatus = processReference.terminationStatus
-            } catch {
-                logger.warning("Could not read process termination status: \(error)")
-                terminationStatus = -1
-            }
-            
+            let terminationStatus = processReference.terminationStatus
             if terminationStatus == 0 && lastProgress < 1.0 {
                 logger.info("Setting final progress to 100% (process completed successfully)")
                 DispatchQueue.main.async {

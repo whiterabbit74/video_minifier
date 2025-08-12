@@ -3,6 +3,7 @@ import AppKit
 
 @main
 struct VideoSzhimakaApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settingsService = SettingsService()
     @State private var windowController: NSWindowController?
     @State private var showIncompatibilityAlert = false
@@ -111,11 +112,17 @@ struct VideoSzhimakaApp: App {
             statusItem.button?.toolTip = "Видео-Сжимака"
             
             let menu = NSMenu()
-            menu.addItem(NSMenuItem(title: "Показать окно", action: #selector(AppDelegate.showMainWindow), keyEquivalent: ""))
+            let itemShow = NSMenuItem(title: "Показать окно", action: #selector(AppDelegate.showMainWindow), keyEquivalent: "")
+            itemShow.target = AppDelegate.shared
+            menu.addItem(itemShow)
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Настройки", action: #selector(AppDelegate.showSettings), keyEquivalent: ","))
+            let itemSettings = NSMenuItem(title: "Настройки", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
+            itemSettings.target = AppDelegate.shared
+            menu.addItem(itemSettings)
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Выйти", action: #selector(AppDelegate.quit), keyEquivalent: "q"))
+            let itemQuit = NSMenuItem(title: "Выйти", action: #selector(AppDelegate.quit), keyEquivalent: "q")
+            itemQuit.target = AppDelegate.shared
+            menu.addItem(itemQuit)
             
             statusItem.menu = menu
             AppDelegate.shared.statusItem = statusItem
