@@ -48,6 +48,8 @@
 		A1000123 /* FormatCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000117 /* FormatCompatibilityTests.swift */; };
 		A1000124 /* UserScenarioTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000118 /* UserScenarioTests.swift */; };
 		A1000125 /* CrashRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000119 /* CrashRecoveryTests.swift */; };
+		A1000126 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000127 /* AboutView.swift */; };
+		A1000129 /* FFmpeg_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = A1000128 /* FFmpeg_LICENSE.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -106,6 +108,8 @@
 		A1000117 /* FormatCompatibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatCompatibilityTests.swift; sourceTree = "<group>"; };
 		A1000118 /* UserScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserScenarioTests.swift; sourceTree = "<group>"; };
 		A1000119 /* CrashRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashRecoveryTests.swift; sourceTree = "<group>"; };
+		A1000127 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		A1000128 /* FFmpeg_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FFmpeg_LICENSE.txt; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +186,7 @@
 				A1000089 /* SettingsView.swift */,
 				A1000099 /* LogsView.swift */,
 				A1000103 /* ErrorAlertView.swift */,
+				A1000127 /* AboutView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -253,6 +258,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000078 /* bin */,
+				A100012A /* LICENSES */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -263,6 +269,14 @@
 				A1000074 /* ffmpeg */,
 			);
 			path = bin;
+			sourceTree = "<group>";
+		};
+		A100012A /* LICENSES */ = {
+			isa = PBXGroup;
+			children = (
+				A1000128 /* FFmpeg_LICENSE.txt */,
+			);
+			path = LICENSES;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -349,6 +363,7 @@
 				A1000007 /* Preview Assets.xcassets in Resources */,
 				A1000005 /* Assets.xcassets in Resources */,
 				A1000073 /* ffmpeg in Resources */,
+				A1000129 /* FFmpeg_LICENSE.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -388,6 +403,7 @@
 				A1000105 /* VideoCompressionError.swift in Sources */,
 				A1000106 /* ErrorAlertView.swift in Sources */,
 				A1000108 /* PerformanceMonitorService.swift in Sources */,
+				A1000126 /* AboutView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -552,7 +568,7 @@
 				CODE_SIGN_ENTITLEMENTS = VideoSzhimaka/VideoSzhimaka.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -581,7 +597,7 @@
 				CODE_SIGN_ENTITLEMENTS = VideoSzhimaka/VideoSzhimaka.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -667,7 +683,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-/* End XCConfigurationList section */
 	};
 	rootObject = A1000025 /* Project object */;
 }

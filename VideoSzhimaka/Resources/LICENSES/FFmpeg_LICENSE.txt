@@ -1,0 +1,15 @@
+FFmpeg License Notice
+
+This application bundles FFmpeg, which is licensed under the GNU Lesser General Public License (LGPL) version 2.1 or later, or under the GNU General Public License (GPL), depending on the configuration and included components.
+
+For details about FFmpeg licensing, please refer to the official documentation and license texts included with FFmpeg. If this distribution uses LGPL, it must comply with the terms of the LGPL, including allowing users to relink or replace FFmpeg libraries. If this distribution uses GPL, the entire combined work must comply with the GPL.
+
+FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
+
+Copyright (c) the FFmpeg developers.
+
+Source code and licensing information are available at: https://ffmpeg.org
+
+If you require the exact corresponding source code or build configuration for the FFmpeg binary bundled with this application, contact the developer of this application.
+
+Full license texts (LGPL/GPL and others) are available at: https://ffmpeg.org/legal.html
