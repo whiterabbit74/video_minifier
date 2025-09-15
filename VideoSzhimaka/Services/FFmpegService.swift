@@ -131,30 +131,30 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                     continuation.resume(throwing: VideoCompressionError.unknownError("Service deallocated"))
                     return
                 }
-                
+
                 // Проверяем кэш
                 if let cachedInfo = self.metadataCache[cacheKey] {
                     self.logger.info("Using cached metadata for: \(url.path)")
                     continuation.resume(returning: cachedInfo)
                     return
                 }
-                
-                // Извлекаем метаданные в фоновой очереди
+
+                // Извлекаем метаданные в фоновой очереди только если не нашли в кэше
                 self.processQueue.async {
                     do {
                         let videoInfo = try self.extractVideoMetadata(from: url)
-                        
+
                         // Сохраняем в кэш
                         self.cacheQueue.async(flags: .barrier) {
                             self.metadataCache[cacheKey] = videoInfo
-                            
+
                             // Ограничиваем размер кэша (максимум 100 файлов)
                             if self.metadataCache.count > 100 {
                                 let oldestKey = self.metadataCache.keys.first!
                                 self.metadataCache.removeValue(forKey: oldestKey)
                             }
                         }
-                        
+
                         continuation.resume(returning: videoInfo)
                     } catch {
                         continuation.resume(throwing: error)
