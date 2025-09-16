@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import os.log
 
 /// Service for monitoring performance and resource usage during video compression
@@ -120,23 +121,29 @@ class PerformanceMonitorService: ObservableObject {
     }
     
     private func getCPUUsage() -> Double {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-        
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_,
-                         task_flavor_t(MACH_TASK_BASIC_INFO),
-                         $0,
-                         &count)
+        var count = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride)
+        var cpuLoadInfo = host_cpu_load_info_data_t()
+
+        let result = withUnsafeMutablePointer(to: &cpuLoadInfo) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &count)
             }
         }
-        
-        if kerr == KERN_SUCCESS {
-            return Double(info.resident_size) / Double(ProcessInfo.processInfo.physicalMemory) * 100.0
+
+        guard result == KERN_SUCCESS else {
+            return 0.0
         }
-        
-        return 0.0
+
+        let user = Double(cpuLoadInfo.cpu_ticks.0)
+        let system = Double(cpuLoadInfo.cpu_ticks.1)
+        let idle = Double(cpuLoadInfo.cpu_ticks.2)
+        let nice = Double(cpuLoadInfo.cpu_ticks.3)
+
+        let totalTicks = user + system + idle + nice
+        guard totalTicks > 0 else { return 0.0 }
+
+        let activeTicks = user + system + nice
+        return (activeTicks / totalTicks) * 100.0
     }
     
     private func getMemoryUsage() -> Double {

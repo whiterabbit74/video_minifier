@@ -2,19 +2,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    @EnvironmentObject private var settingsService: SettingsService
+
     var body: some View {
-        MainView()
+        MainView(settingsService: settingsService)
     }
 }
 
 struct MainView: View {
-    @EnvironmentObject private var settingsService: SettingsService
+    @ObservedObject private var settingsService: SettingsService
     @StateObject private var viewModel: MainViewModel
     @AppStorage("appTheme") private var appTheme: String = "dark" // "light" or "dark"
     
-    init() {
-        // Create viewModel with default services - will be updated in onAppear
-        self._viewModel = StateObject(wrappedValue: MainViewModel())
+    init(settingsService: SettingsService) {
+        self._settingsService = ObservedObject(initialValue: settingsService)
+        self._viewModel = StateObject(wrappedValue: MainViewModel(settingsService: settingsService))
     }
     
     var body: some View {
@@ -53,7 +55,7 @@ struct MainView: View {
             }
         }
         .sheet(isPresented: $viewModel.showSettings) {
-            SettingsView()
+            SettingsView(settingsService: settingsService)
                 .environmentObject(settingsService)
         }
         .sheet(isPresented: $viewModel.showLogs) {
@@ -216,4 +218,5 @@ struct FooterView: View {
 
 #Preview {
     ContentView()
+        .environmentObject(SettingsService())
 }

@@ -38,7 +38,7 @@ class PerformanceOptimizer {
     
     /// Check if system is under memory pressure
     func isUnderMemoryPressure() -> Bool {
-        let memoryInfo = mach_task_basic_info()
+        var memoryInfo = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
         
         let result = withUnsafeMutablePointer(to: &memoryInfo) {
