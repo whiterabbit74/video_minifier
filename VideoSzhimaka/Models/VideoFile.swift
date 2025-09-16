@@ -4,12 +4,15 @@ import Foundation
 struct VideoFile: Identifiable, Codable {
     /// Unique identifier for the video file
     let id = UUID()
-    
-    /// URL path to the video file
-    let url: URL
-    
+
+    /// Original URL path to the video file (used for reprocessing/deletion)
+    let originalURL: URL
+
+    /// Current URL used for interactions (may point to the compressed file)
+    var url: URL
+
     /// Display name of the file
-    let name: String
+    var name: String
     
     /// Duration of the video in seconds
     var duration: TimeInterval
@@ -28,15 +31,46 @@ struct VideoFile: Identifiable, Codable {
     
     /// Custom coding keys to handle UUID serialization
     private enum CodingKeys: String, CodingKey {
-        case url, name, duration, originalSize, compressedSize, compressionProgress, status
+        case url, name, duration, originalSize, compressedSize, compressionProgress, status, originalURL
     }
     
     /// Initialize a new VideoFile
     init(url: URL, name: String, duration: TimeInterval, originalSize: Int64) {
+        self.originalURL = url
         self.url = url
         self.name = name
         self.duration = duration
         self.originalSize = originalSize
+    }
+}
+
+// MARK: - Codable
+
+extension VideoFile {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedURL = try container.decode(URL.self, forKey: .url)
+
+        self.url = decodedURL
+        self.originalURL = try container.decodeIfPresent(URL.self, forKey: .originalURL) ?? decodedURL
+        self.name = try container.decode(String.self, forKey: .name)
+        self.duration = try container.decode(TimeInterval.self, forKey: .duration)
+        self.originalSize = try container.decode(Int64.self, forKey: .originalSize)
+        self.compressedSize = try container.decodeIfPresent(Int64.self, forKey: .compressedSize)
+        self.compressionProgress = try container.decodeIfPresent(Double.self, forKey: .compressionProgress) ?? 0.0
+        self.status = try container.decodeIfPresent(CompressionStatus.self, forKey: .status) ?? .pending
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(url, forKey: .url)
+        try container.encode(originalURL, forKey: .originalURL)
+        try container.encode(name, forKey: .name)
+        try container.encode(duration, forKey: .duration)
+        try container.encode(originalSize, forKey: .originalSize)
+        try container.encodeIfPresent(compressedSize, forKey: .compressedSize)
+        try container.encode(compressionProgress, forKey: .compressionProgress)
+        try container.encode(status, forKey: .status)
     }
 }
 

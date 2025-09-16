@@ -2,9 +2,18 @@ import SwiftUI
 
 /// Settings panel view for configuring compression parameters
 struct SettingsView: View {
-    @StateObject private var viewModel = SettingsViewModel()
+    @StateObject private var viewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
-    
+    @State private var showUnsavedChangesConfirmation = false
+
+    init(settingsService: SettingsService) {
+        self._viewModel = StateObject(wrappedValue: SettingsViewModel(settingsService: settingsService))
+    }
+
+    init(viewModel: SettingsViewModel) {
+        self._viewModel = StateObject(wrappedValue: viewModel)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -19,12 +28,7 @@ struct SettingsView: View {
                     dismiss()
                 },
                 onClose: {
-                    if viewModel.hasUnsavedChanges {
-                        // Show unsaved changes dialog
-                        // For now, just discard changes
-                        viewModel.discardChanges()
-                    }
-                    dismiss()
+                    handleCloseRequest()
                 }
             )
             
@@ -77,6 +81,32 @@ struct SettingsView: View {
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Все настройки будут сброшены к значениям по умолчанию. Это действие нельзя отменить.")
+        }
+        .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
+        .confirmationDialog(
+            "Сохранить изменения?",
+            isPresented: $showUnsavedChangesConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Сохранить изменения") {
+                viewModel.saveSettings()
+                dismiss()
+            }
+            Button("Не сохранять", role: .destructive) {
+                viewModel.discardChanges()
+                dismiss()
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Есть несохранённые изменения. Сохранить их перед закрытием?")
+        }
+    }
+
+    private func handleCloseRequest() {
+        if viewModel.hasUnsavedChanges {
+            showUnsavedChangesConfirmation = true
+        } else {
+            dismiss()
         }
     }
 }
@@ -337,5 +367,5 @@ struct ResetSettingsView: View {
 // MARK: - Previews
 
 #Preview {
-    SettingsView()
+    SettingsView(viewModel: .preview)
 }

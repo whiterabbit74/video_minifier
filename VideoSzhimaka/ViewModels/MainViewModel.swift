@@ -79,7 +79,7 @@ class MainViewModel: ObservableObject {
     /// - Parameter url: URL of the video file to add
     private func addSingleFile(_ url: URL) {
         // Check if file already exists in the list
-        if videoFiles.contains(where: { $0.url == url }) {
+        if videoFiles.contains(where: { $0.url == url || $0.originalURL == url }) {
             loggingService.warning("Файл уже добавлен: \(url.lastPathComponent)", category: "FileManagement")
             return
         }
@@ -335,7 +335,7 @@ class MainViewModel: ObservableObject {
             }
             
             // Generate output URL
-            let outputURL = fileManagerService.generateOutputURL(for: file.url)
+            let outputURL = fileManagerService.generateOutputURL(for: file.originalURL)
             
             // Adjust settings based on performance recommendations
             var adjustedSettings = settingsService.settings
@@ -349,7 +349,7 @@ class MainViewModel: ObservableObject {
             
             // Compress the video
             try await ffmpegService.compressVideo(
-                input: file.url,
+                input: file.originalURL,
                 output: outputURL,
                 settings: adjustedSettings
             ) { [weak self] progress in
@@ -373,22 +373,28 @@ class MainViewModel: ObservableObject {
             // Get compressed file size
             let compressedSize = try fileManagerService.getFileSize(url: outputURL)
             
+            let isCompressedLarger = compressedSize > file.originalSize
+
             // Safely update file status using fileId instead of index
             if let currentIndex = videoFiles.firstIndex(where: { $0.id == fileId }) {
                 videoFiles[currentIndex].status = .completed
                 videoFiles[currentIndex].compressedSize = compressedSize
                 videoFiles[currentIndex].compressionProgress = 1.0
+
+                if !isCompressedLarger {
+                    videoFiles[currentIndex].url = outputURL
+                    videoFiles[currentIndex].name = outputURL.lastPathComponent
+                }
             }
-            
+
             let compressionRatio = (1.0 - Double(compressedSize) / Double(file.originalSize)) * 100.0
-            
+
             // Log performance metrics
             let finalMetrics = performanceMonitor.getCurrentMetrics()
             loggingService.info("Сжатие завершено: \(file.name) (\(file.originalSize.formattedFileSize) → \(compressedSize.formattedFileSize), экономия: \(String(format: "%.1f", compressionRatio))%)", category: "Compression")
             loggingService.info("Производительность: CPU \(String(format: "%.1f", finalMetrics.cpuUsage))%, Память \(String(format: "%.1f", finalMetrics.memoryUsage))MB, Температура: \(finalMetrics.thermalState.description)", category: "Performance")
-            
+
             // If compressed file is larger than original, delete the compressed file immediately
-            let isCompressedLarger = compressedSize > file.originalSize
             if isCompressedLarger {
                 do {
                     try fileManagerService.deleteFile(at: outputURL)
@@ -401,7 +407,7 @@ class MainViewModel: ObservableObject {
             // Delete original file if requested, but only when compressed is not larger
             if settingsService.settings.deleteOriginals {
                 if !isCompressedLarger {
-                    try fileManagerService.deleteFile(at: file.url)
+                    try fileManagerService.deleteFile(at: file.originalURL)
                     loggingService.info("Оригинальный файл удален: \(file.name)", category: "FileManagement")
                 } else {
                     loggingService.info("Оригинал НЕ удален, так как сжатый файл оказался больше", category: "FileManagement")
@@ -524,6 +530,7 @@ class MainViewModel: ObservableObject {
     func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         let group = DispatchGroup()
         var urls: [URL] = []
+        let urlAccessQueue = DispatchQueue(label: "com.videoszhimaka.dropurls")
         
         for provider in providers {
             group.enter()
@@ -533,14 +540,18 @@ class MainViewModel: ObservableObject {
                 
                 if let data = item as? Data,
                    let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    urls.append(url)
+                    urlAccessQueue.sync {
+                        urls.append(url)
+                    }
                 }
             }
         }
-        
+
         group.notify(queue: .main) { [weak self] in
+            let collectedURLs = urlAccessQueue.sync { urls }
+
             // Filter for video files
-            let videoURLs = urls.filter { url in
+            let videoURLs = collectedURLs.filter { url in
                 let pathExtension = url.pathExtension.lowercased()
                 return ["mp4", "mov", "mkv", "avi", "webm", "flv", "wmv", "m4v"].contains(pathExtension)
             }
@@ -713,13 +724,13 @@ class MainViewModel: ObservableObject {
 
 extension MainViewModel {
     /// Convenience initializer for dependency injection in production
-    convenience init() {
+    convenience init(settingsService: any SettingsServiceProtocol) {
         do {
             let ffmpegService = try FFmpegService()
             self.init(
                 ffmpegService: ffmpegService,
                 fileManagerService: FileManagerService(),
-                settingsService: SettingsService(),
+                settingsService: settingsService,
                 loggingService: LoggingService(),
                 performanceMonitor: PerformanceMonitorService.shared
             )
@@ -729,16 +740,20 @@ extension MainViewModel {
             self.init(
                 ffmpegService: fallbackFFmpegService,
                 fileManagerService: FileManagerService(),
-                settingsService: SettingsService(),
+                settingsService: settingsService,
                 loggingService: LoggingService(),
                 performanceMonitor: PerformanceMonitorService.shared
             )
-            
+
             // Set the error state after initialization
             Task { @MainActor in
                 self.currentError = .ffmpegNotFound
             }
         }
+    }
+
+    convenience init() {
+        self.init(settingsService: SettingsService())
     }
 }
 
