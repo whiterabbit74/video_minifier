@@ -125,7 +125,7 @@ struct FileRowView: View {
     private var compressionProgress: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("Сжимается...")
+                Text(NSLocalizedString("Сжимается...", comment: ""))
                     .font(.caption)
                     .foregroundColor(.primary)
                 
@@ -179,7 +179,7 @@ struct FileRowView: View {
         let isLarger = file.isCompressedLarger
         let displayColor = isLarger ? Color.red : Color(NSColor.successColor)
         let iconName = isLarger ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
-        let message = isLarger ? "Файл стал больше!" : "Сжатие завершено"
+        let message = isLarger ? NSLocalizedString("Файл стал больше!", comment: "") : NSLocalizedString("Сжатие завершено", comment: "")
         
         HStack(spacing: 8) {
             Image(systemName: iconName)
@@ -212,7 +212,7 @@ struct FileRowView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("Открыть в Finder")
+            .help(NSLocalizedString("Открыть в Finder", comment: ""))
             
             Button(action: {
                 viewModel.removeFile(withId: file.id)
@@ -223,7 +223,7 @@ struct FileRowView: View {
             .controlSize(.small)
             .foregroundColor(Color(NSColor.errorColor))
             .disabled(viewModel.currentlyProcessingFileId == file.id)
-            .help("Удалить из списка")
+            .help(NSLocalizedString("Удалить из списка", comment: ""))
         }
     }
     
@@ -231,7 +231,7 @@ struct FileRowView: View {
     private var primaryActionButton: some View {
         switch file.status {
         case .pending:
-            Button("Сжать") {
+            Button(NSLocalizedString("Сжать", comment: "")) {
                 viewModel.compressFile(withId: file.id)
             }
             .buttonStyle(.borderedProminent)
@@ -240,14 +240,14 @@ struct FileRowView: View {
             
         case .failed(let error):
             if error.isRetryable {
-                Button("Повторить") {
+                Button(NSLocalizedString("Повторить", comment: "")) {
                     viewModel.retryCompression(forFileId: file.id)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .tint(Color(NSColor.warningColor))
             } else {
-                Button("Удалить") {
+                Button(NSLocalizedString("Удалить", comment: "")) {
                     viewModel.removeFile(withId: file.id)
                 }
                 .buttonStyle(.bordered)
@@ -256,7 +256,7 @@ struct FileRowView: View {
             }
             
         case .compressing:
-            Button("Отменить") {
+            Button(NSLocalizedString("Отменить", comment: "")) {
                 viewModel.cancelAllProcessing()
             }
             .buttonStyle(.bordered)

@@ -17,6 +17,9 @@ class SettingsViewModel: ObservableObject {
     /// Whether to show the reset confirmation dialog
     @Published var showResetConfirmation = false
     
+    /// Whether a restart is required to apply changes (e.g. language)
+    @Published var restartRequired = false
+    
     // MARK: - Private Properties
     
     private let settingsService: any SettingsServiceProtocol
@@ -37,10 +40,25 @@ class SettingsViewModel: ObservableObject {
     
     /// Save current settings to persistent storage
     func saveSettings() {
+        // Check if language changed
+        if settings.language != originalSettings.language {
+            updateAppLanguage(settings.language)
+            restartRequired = true
+        }
+        
         settingsService.settings = settings
         settingsService.saveSettings()
         originalSettings = settings
         hasUnsavedChanges = false
+    }
+    
+    private func updateAppLanguage(_ language: AppLanguage) {
+        if let code = language.languageCode {
+            UserDefaults.standard.set([code], forKey: "AppleLanguages")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+        }
+        UserDefaults.standard.synchronize()
     }
     
     /// Discard changes and revert to saved settings

@@ -20,8 +20,8 @@ struct VideoSzhimakaApp: App {
                 .onReceive(settingsService.$settings) { settings in
                     configureAppBehavior()
                 }
-                .alert("Несовместимая архитектура", isPresented: $showIncompatibilityAlert) {
-                    Button("Выйти") {
+                .alert(NSLocalizedString("Несовместимая архитектура", comment: ""), isPresented: $showIncompatibilityAlert) {
+                    Button(NSLocalizedString("Выйти", comment: "")) {
                         NSApp.terminate(nil)
                     }
                 } message: {
@@ -46,7 +46,7 @@ struct VideoSzhimakaApp: App {
                 self.windowController = NSWindowController(window: window)
                 
                 // Set window properties
-                window.title = "Видео-Сжимака"
+                window.title = NSLocalizedString("Видео-Сжимака", comment: "")
                 window.titlebarAppearsTransparent = false
                 window.titleVisibility = .visible
                 
@@ -109,21 +109,21 @@ struct VideoSzhimakaApp: App {
         if AppDelegate.shared.statusItem == nil {
             let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             statusItem.button?.title = "🎬"
-            statusItem.button?.toolTip = "Видео-Сжимака"
+            statusItem.button?.toolTip = NSLocalizedString("Видео-Сжимака", comment: "")
             
             let menu = NSMenu()
-            let itemShow = NSMenuItem(title: "Показать окно", action: #selector(AppDelegate.showMainWindow), keyEquivalent: "")
+            let itemShow = NSMenuItem(title: NSLocalizedString("Показать окно", comment: ""), action: #selector(AppDelegate.showMainWindow), keyEquivalent: "")
             itemShow.target = AppDelegate.shared
             menu.addItem(itemShow)
             menu.addItem(NSMenuItem.separator())
-            let itemSettings = NSMenuItem(title: "Настройки", action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
+            let itemSettings = NSMenuItem(title: NSLocalizedString("Настройки", comment: ""), action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
             itemSettings.target = AppDelegate.shared
             menu.addItem(itemSettings)
-            let itemAbout = NSMenuItem(title: "О программе", action: #selector(AppDelegate.showAbout), keyEquivalent: "")
+            let itemAbout = NSMenuItem(title: NSLocalizedString("О программе", comment: ""), action: #selector(AppDelegate.showAbout), keyEquivalent: "")
             itemAbout.target = AppDelegate.shared
             menu.addItem(itemAbout)
             menu.addItem(NSMenuItem.separator())
-            let itemQuit = NSMenuItem(title: "Выйти", action: #selector(AppDelegate.quit), keyEquivalent: "q")
+            let itemQuit = NSMenuItem(title: NSLocalizedString("Выйти", comment: ""), action: #selector(AppDelegate.quit), keyEquivalent: "q")
             itemQuit.target = AppDelegate.shared
             menu.addItem(itemQuit)
             
@@ -171,7 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                               backing: .buffered,
                               defer: false)
         window.center()
-        window.title = "О программе"
+        window.title = NSLocalizedString("О программе", comment: "")
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
         window.standardWindowButton(.zoomButton)?.isHidden = true
@@ -194,4 +194,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Notification.Name {
     static let showSettings = Notification.Name("showSettings")
+    static let openLogs = Notification.Name("openLogs")
 }

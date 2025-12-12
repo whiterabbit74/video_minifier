@@ -27,8 +27,8 @@ struct LogsView: View {
             // Панель инструментов
             HStack {
                 // Фильтр по уровню
-                Picker("Уровень", selection: $selectedLevel) {
-                    Text("Все уровни").tag(LogLevel?.none)
+                Picker(NSLocalizedString("Уровень", comment: ""), selection: $selectedLevel) {
+                    Text(NSLocalizedString("Все уровни", comment: "")).tag(LogLevel?.none)
                     ForEach(LogLevel.allCases, id: \.self) { level in
                         Text(level.displayName).tag(LogLevel?.some(level))
                     }
@@ -42,7 +42,7 @@ struct LogsView: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
-                    TextField("Поиск в логах...", text: $searchText)
+                    TextField(NSLocalizedString("Поиск в логах...", comment: ""), text: $searchText)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                 }
                 .frame(width: 200)
@@ -51,13 +51,13 @@ struct LogsView: View {
                 
                 // Кнопки действий
                 HStack {
-                    Button("Экспорт") {
+                    Button(NSLocalizedString("Экспорт", comment: "")) {
                         exportedLogs = loggingService.exportLogs()
                         showingExportSheet = true
                     }
                     .disabled(loggingService.logs.isEmpty)
                     
-                    Button("Очистить") {
+                    Button(NSLocalizedString("Очистить", comment: "")) {
                         loggingService.clearLogs()
                     }
                     .disabled(loggingService.logs.isEmpty)
@@ -89,11 +89,11 @@ struct LogsView: View {
                     Image(systemName: "doc.text")
                         .font(.system(size: 48))
                         .foregroundColor(.secondary)
-                    Text(searchText.isEmpty ? "Логи отсутствуют" : "Логи не найдены")
+                    Text(searchText.isEmpty ? NSLocalizedString("Логи отсутствуют", comment: "") : NSLocalizedString("Логи не найдены", comment: ""))
                         .font(.title2)
                         .foregroundColor(.secondary)
                     if !searchText.isEmpty {
-                        Text("Попробуйте изменить поисковый запрос")
+                        Text(NSLocalizedString("Попробуйте изменить поисковый запрос", comment: ""))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -108,7 +108,7 @@ struct LogsView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 500)
-        .navigationTitle("Логи приложения")
+        .navigationTitle(NSLocalizedString("Логи приложения", comment: ""))
         .sheet(isPresented: $showingExportSheet) {
             LogExportView(logs: exportedLogs)
         }
@@ -197,13 +197,13 @@ struct LogExportView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Text("Экспорт логов")
+                Text(NSLocalizedString("Экспорт логов", comment: ""))
                     .font(.title2)
                     .fontWeight(.semibold)
                 
                 Spacer()
                 
-                Button("Закрыть") {
+                Button(NSLocalizedString("Закрыть", comment: "")) {
                     presentationMode.wrappedValue.dismiss()
                 }
             }
@@ -221,12 +221,12 @@ struct LogExportView: View {
             .padding(.horizontal)
             
             HStack {
-                Button("Копировать") {
+                Button(NSLocalizedString("Копировать", comment: "")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(logs, forType: .string)
                 }
                 
-                Button("Сохранить в файл") {
+                Button(NSLocalizedString("Сохранить в файл", comment: "")) {
                     showingSavePanel = true
                 }
                 

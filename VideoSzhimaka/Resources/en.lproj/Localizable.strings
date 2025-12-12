@@ -1,0 +1,146 @@
+/* General */
+"Видео-Сжимака" = "Video Minifier";
+"О программе" = "About";
+"Выйти" = "Quit";
+"Настройки" = "Settings";
+"Показать окно" = "Show Window";
+"Готово" = "Done";
+"Отмена" = "Cancel";
+"Сохранить" = "Save";
+"Не сохранять" = "Don't Save";
+"Отменить" = "Cancel";
+"OK" = "OK";
+"Закрыть" = "Close";
+"Копировать" = "Copy";
+"Сохранить в файл" = "Save to File";
+"Требуется перезапуск" = "Restart Required";
+"Чтобы изменить язык, необходимо перезапустить приложение" = "To change the language, you must restart the application";
+"Перезапустить сейчас" = "Restart Now";
+"Позже" = "Later";
+
+/* General Settings */
+"Общие" = "General";
+"Язык" = "Language";
+"Системный" = "System";
+"Русский" = "Russian";
+"English" = "English";
+
+/* Theme */
+"Тема" = "Theme";
+"Светлая" = "Light";
+"Темная" = "Dark";
+"Системная" = "System";
+
+/* Logs */
+"Показать логи" = "Show Logs";
+"Открыть окно логов" = "Open logs window";
+
+/* Architecture Alert */
+"Несовместимая архитектура" = "Incompatible Architecture";
+"Это приложение оптимизировано для процессоров Apple Silicon (M1/M2/M3) и не может работать на Intel Mac. Пожалуйста, используйте Mac с процессором Apple Silicon." = "This app is optimized for Apple Silicon (M1/M2/M3) processors and cannot run on Intel Macs. Please use a Mac with an Apple Silicon processor.";
+
+/* Content View & Main */
+"Добавить файлы" = "Add Files";
+"Сжать всё" = "Compress All";
+"Показать логи" = "Show Logs";
+"Закрыть логи" = "Close Logs";
+"Файлов: %d" = "Files: %d";
+"Размер: %@" = "Size: %@";
+"Перетащите видеофайлы сюда" = "Drag video files here";
+"или нажмите кнопку \"Добавить файлы\"" = "or click \"Add Files\"";
+"Ошибки при обработке" = "Processing Errors";
+"Повторить все" = "Retry All";
+"Обнаружено ошибок: %d. Проверьте логи для подробностей." = "Errors detected: %d. Check logs for details.";
+
+/* File Status & Row */
+"В очереди" = "Queued";
+"Сжатие..." = "Compressing...";
+"Сжимается..." = "Compressing...";
+"Готово" = "Finished";
+"Ошибка" = "Error";
+"Отменено" = "Cancelled";
+"Файл стал больше!" = "File size increased!";
+"Сжатие завершено" = "Compression finished";
+"Сжать" = "Compress";
+"Повторить" = "Retry";
+"Удалить" = "Delete";
+"Удалить из списка" = "Remove from list";
+"Открыть в Finder" = "Open in Finder";
+
+/* Logs */
+"Логи приложения" = "Application Logs";
+"Уровень" = "Level";
+"Все уровни" = "All Levels";
+"Поиск в логах..." = "Search logs...";
+"Экспорт" = "Export";
+"Очистить" = "Clear";
+"Логи отсутствуют" = "No logs";
+"Логи не найдены" = "No logs found";
+"Попробуйте изменить поисковый запрос" = "Try changing your search query";
+"Экспорт логов" = "Export Logs";
+
+/* Error Alert */
+"Произошла ошибка" = "An Error Occurred";
+"Обнаружены ошибки (%d)" = "Errors Detected (%d)";
+
+/* Errors */
+"FFmpeg не найден в ресурсах приложения" = "FFmpeg not found in application resources";
+"Неподдерживаемый формат видео: %@" = "Unsupported video format: %@";
+"Ошибка сжатия: %@" = "Compression error: %@";
+"Файл не найден: %@" = "File not found: %@";
+"Недостаточно места на диске для сохранения сжатого файла" = "Insufficient disk space to save the compressed file";
+"Операция отменена пользователем" = "Operation cancelled by user";
+"Некорректный входной файл: %@" = "Invalid input file: %@";
+"Ошибка создания выходного файла: %@" = "Error creating output file: %@";
+"Нет прав доступа к файлу: %@" = "No permission to access file: %@";
+"Ошибка сети: %@" = "Network error: %@";
+"Поврежденный файл: %@" = "Corrupted file: %@";
+"Неизвестная ошибка: %@" = "Unknown error: %@";
+
+/* Recovery Suggestions */
+"Переустановите приложение или обратитесь в службу поддержки" = "Reinstall the application or contact support";
+"Попробуйте конвертировать файл в поддерживаемый формат" = "Try converting the file to a supported format";
+"Проверьте настройки сжатия и попробуйте снова" = "Check compression settings and try again";
+"Убедитесь, что файл существует и не был перемещен" = "Ensure the file exists and has not been moved";
+"Освободите место на диске и попробуйте снова" = "Free up disk space and try again";
+"Выберите корректный видеофайл" = "Select a valid video file";
+"Проверьте права доступа к папке назначения" = "Check permissions for the destination folder";
+"Предоставьте приложению права доступа к файлу" = "Grant the application access to the file";
+"Проверьте подключение к интернету" = "Check your internet connection";
+"Попробуйте использовать другой файл" = "Try using a different file";
+"Попробуйте перезапустить приложение" = "Try restarting the application";
+
+/* Settings */
+"Качество видео" = "Video Quality";
+"Кодек" = "Codec";
+"Аудио" = "Audio";
+"Поведение" = "Behavior";
+"Отображение приложения" = "App Display";
+"Режим отображения" = "Display Mode";
+"Dock и меню-бар" = "Dock and Menu Bar";
+"Только Dock" = "Dock Only";
+"Только меню-бар" = "Menu Bar Only";
+"Сброс настроек" = "Reset Settings";
+"Вернуть все настройки к значениям по умолчанию" = "Reset all settings to default values";
+"Сбросить" = "Reset";
+"Сбросить настройки" = "Reset Settings";
+"Все настройки будут сброшены к значениям по умолчанию. Это действие нельзя отменить." = "All settings will be reset to defaults. This action cannot be undone.";
+"Сохранить изменения?" = "Save changes?";
+"Есть несохранённые изменения. Сохранить их перед закрытием?" = "There are unsaved changes. Save them before closing?";
+"Использовать аппаратное ускорение" = "Use Hardware Acceleration";
+"Не перекодировать аудио" = "Copy Audio";
+"Аудиодорожка будет скопирована без изменений" = "Audio track will be copied without changes";
+"Аудио будет перекодировано в AAC 128kbps" = "Audio will be re-encoded to AAC 128kbps";
+"Удалять оригинальные файлы после сжатия" = "Delete original files after compression";
+"Автоматически закрыть приложение после завершения" = "Automatically close app when finished";
+"Показывать в Dock" = "Show in Dock";
+"Показывать в меню-баре" = "Show in Menu Bar";
+"Приложение должно отображаться либо в Dock, либо в меню-баре" = "The app must be shown in either the Dock or the Menu Bar";
+"H.265 поддерживается не на всех устройствах" = "H.265 is not supported on all devices";
+
+/* CRF Descriptions */
+"Отличное качество, большой размер" = "Excellent quality, large size";
+"Хорошее качество, средний размер" = "Good quality, medium size";
+"Среднее качество, малый размер" = "Medium quality, small size";
+"Низкое качество, очень малый размер" = "Low quality, very small size";
+"Ориентировочное сжатие: ~%d%%" = "Estimated compression: ~%d%%";

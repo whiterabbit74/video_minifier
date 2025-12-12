@@ -19,29 +19,29 @@ enum VideoCompressionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .ffmpegNotFound:
-            return "FFmpeg не найден в ресурсах приложения"
+            return NSLocalizedString("FFmpeg не найден в ресурсах приложения", comment: "")
         case .unsupportedFormat(let format):
-            return "Неподдерживаемый формат видео: \(format)"
+            return String(format: NSLocalizedString("Неподдерживаемый формат видео: %@", comment: ""), format)
         case .compressionFailed(let message):
-            return "Ошибка сжатия: \(message)"
+            return String(format: NSLocalizedString("Ошибка сжатия: %@", comment: ""), message)
         case .fileNotFound(let path):
-            return "Файл не найден: \(path)"
+            return String(format: NSLocalizedString("Файл не найден: %@", comment: ""), path)
         case .insufficientSpace:
-            return "Недостаточно места на диске для сохранения сжатого файла"
+            return NSLocalizedString("Недостаточно места на диске для сохранения сжатого файла", comment: "")
         case .cancelled:
-            return "Операция отменена пользователем"
+            return NSLocalizedString("Операция отменена пользователем", comment: "")
         case .invalidInput(let message):
-            return "Некорректный входной файл: \(message)"
+            return String(format: NSLocalizedString("Некорректный входной файл: %@", comment: ""), message)
         case .outputPathError(let path):
-            return "Ошибка создания выходного файла: \(path)"
+            return String(format: NSLocalizedString("Ошибка создания выходного файла: %@", comment: ""), path)
         case .permissionDenied(let path):
-            return "Нет прав доступа к файлу: \(path)"
+            return String(format: NSLocalizedString("Нет прав доступа к файлу: %@", comment: ""), path)
         case .networkError(let message):
-            return "Ошибка сети: \(message)"
+            return String(format: NSLocalizedString("Ошибка сети: %@", comment: ""), message)
         case .corruptedFile(let path):
-            return "Поврежденный файл: \(path)"
+            return String(format: NSLocalizedString("Поврежденный файл: %@", comment: ""), path)
         case .unknownError(let message):
-            return "Неизвестная ошибка: \(message)"
+            return String(format: NSLocalizedString("Неизвестная ошибка: %@", comment: ""), message)
         }
     }
     
@@ -49,29 +49,29 @@ enum VideoCompressionError: LocalizedError {
     var recoverySuggestion: String? {
         switch self {
         case .ffmpegNotFound:
-            return "Переустановите приложение или обратитесь в службу поддержки"
+            return NSLocalizedString("Переустановите приложение или обратитесь в службу поддержки", comment: "")
         case .unsupportedFormat:
-            return "Попробуйте конвертировать файл в поддерживаемый формат"
+            return NSLocalizedString("Попробуйте конвертировать файл в поддерживаемый формат", comment: "")
         case .compressionFailed:
-            return "Проверьте настройки сжатия и попробуйте снова"
+            return NSLocalizedString("Проверьте настройки сжатия и попробуйте снова", comment: "")
         case .fileNotFound:
-            return "Убедитесь, что файл существует и не был перемещен"
+            return NSLocalizedString("Убедитесь, что файл существует и не был перемещен", comment: "")
         case .insufficientSpace:
-            return "Освободите место на диске и попробуйте снова"
+            return NSLocalizedString("Освободите место на диске и попробуйте снова", comment: "")
         case .cancelled:
             return nil
         case .invalidInput:
-            return "Выберите корректный видеофайл"
+            return NSLocalizedString("Выберите корректный видеофайл", comment: "")
         case .outputPathError:
-            return "Проверьте права доступа к папке назначения"
+            return NSLocalizedString("Проверьте права доступа к папке назначения", comment: "")
         case .permissionDenied:
-            return "Предоставьте приложению права доступа к файлу"
+            return NSLocalizedString("Предоставьте приложению права доступа к файлу", comment: "")
         case .networkError:
-            return "Проверьте подключение к интернету"
+            return NSLocalizedString("Проверьте подключение к интернету", comment: "")
         case .corruptedFile:
-            return "Попробуйте использовать другой файл"
+            return NSLocalizedString("Попробуйте использовать другой файл", comment: "")
         case .unknownError:
-            return "Попробуйте перезапустить приложение"
+            return NSLocalizedString("Попробуйте перезапустить приложение", comment: "")
         }
     }
     

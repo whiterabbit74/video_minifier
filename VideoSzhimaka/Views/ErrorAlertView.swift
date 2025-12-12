@@ -7,10 +7,10 @@ struct ErrorAlertModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .alert("Ошибка", isPresented: .constant(error != nil)) {
+            .alert(NSLocalizedString("Ошибка", comment: ""), isPresented: .constant(error != nil)) {
                 if let error = error {
                     if error.isRetryable && onRetry != nil {
-                        Button("Повторить") {
+                        Button(NSLocalizedString("Повторить", comment: "")) {
                             onRetry?()
                             self.error = nil
                         }
@@ -59,7 +59,7 @@ struct ErrorView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.orange)
             
-            Text("Произошла ошибка")
+            Text(NSLocalizedString("Произошла ошибка", comment: ""))
                 .font(.title2)
                 .fontWeight(.semibold)
             
@@ -77,13 +77,13 @@ struct ErrorView: View {
             
             HStack(spacing: 12) {
                 if error.isRetryable && onRetry != nil {
-                    Button("Повторить") {
+                    Button(NSLocalizedString("Повторить", comment: "")) {
                         onRetry?()
                     }
                     .buttonStyle(.borderedProminent)
                 }
                 
-                Button("Закрыть") {
+                Button(NSLocalizedString("Закрыть", comment: "")) {
                     onDismiss()
                 }
                 .buttonStyle(.bordered)
@@ -108,12 +108,12 @@ struct ErrorListView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
                 
-                Text("Обнаружены ошибки (\(errors.count))")
+                Text(String(format: NSLocalizedString("Обнаружены ошибки (%d)", comment: ""), errors.count))
                     .font(.headline)
                 
                 Spacer()
                 
-                Button("Закрыть") {
+                Button(NSLocalizedString("Закрыть", comment: "")) {
                     onDismiss()
                 }
                 .buttonStyle(.bordered)
@@ -145,7 +145,7 @@ struct ErrorListView: View {
             if errors.contains(where: { $0.isRetryable }) && onRetryAll != nil {
                 HStack {
                     Spacer()
-                    Button("Повторить все") {
+                    Button(NSLocalizedString("Повторить все", comment: "")) {
                         onRetryAll?()
                     }
                     .buttonStyle(.borderedProminent)

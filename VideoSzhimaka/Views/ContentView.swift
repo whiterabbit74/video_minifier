@@ -12,7 +12,7 @@ struct ContentView: View {
 struct MainView: View {
     @ObservedObject private var settingsService: SettingsService
     @StateObject private var viewModel: MainViewModel
-    @AppStorage("appTheme") private var appTheme: String = "dark" // "light" or "dark"
+    @AppStorage("appTheme") private var appTheme: String = "system" // "system", "light", "dark"
     
     init(settingsService: SettingsService) {
         self._settingsService = ObservedObject(initialValue: settingsService)
@@ -64,14 +64,37 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showSettings)) { _ in
             viewModel.showSettings = true
         }
-        .preferredColorScheme(appTheme == "light" ? .light : .dark)
+        .onReceive(NotificationCenter.default.publisher(for: .openLogs)) { _ in
+            // Add small delay to allow settings to dismiss if needed
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                viewModel.showLogs = true
+            }
+        }
+        .preferredColorScheme(appTheme == "light" ? .light : (appTheme == "dark" ? .dark : nil))
 
     }
 }
 
 struct HeaderView: View {
     @ObservedObject var viewModel: MainViewModel
-    @AppStorage("appTheme") private var appTheme: String = "dark"
+    @AppStorage("appTheme") private var appTheme: String = "system"
+    
+    // Theme logic
+    private var currentThemeIcon: String {
+        switch appTheme {
+        case "light": return "sun.max.fill"
+        case "dark": return "moon.fill"
+        default: return "gearshape.2.fill" // System/Auto icon
+        }
+    }
+    
+    private var currentThemeName: String {
+        switch appTheme {
+        case "light": return NSLocalizedString("Светлая", comment: "")
+        case "dark": return NSLocalizedString("Темная", comment: "")
+        default: return NSLocalizedString("Системная", comment: "")
+        }
+    }
     
     var body: some View {
         HStack {
@@ -85,21 +108,28 @@ struct HeaderView: View {
                 Button(action: {
                     viewModel.showFilePicker()
                 }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                        Text("Добавить файлы")
-                    }
+                    Image(systemName: "plus")
                 }
                 .buttonStyle(.bordered)
+                .help("Добавить файлы")
                 
-                // Theme toggle button (left of settings)
-                Button(action: {
-                    appTheme = (appTheme == "light") ? "dark" : "light"
-                }) {
-                    Image(systemName: appTheme == "light" ? "sun.max.fill" : "moon.fill")
+                // Theme menu (System -> Light -> Dark)
+                Menu {
+                    Button(action: { appTheme = "system" }) {
+                        Label(NSLocalizedString("Системная", comment: ""), systemImage: "gearshape.2")
+                    }
+                    Button(action: { appTheme = "light" }) {
+                        Label(NSLocalizedString("Светлая", comment: ""), systemImage: "sun.max")
+                    }
+                    Button(action: { appTheme = "dark" }) {
+                        Label(NSLocalizedString("Темная", comment: ""), systemImage: "moon")
+                    }
+                } label: {
+                    Image(systemName: currentThemeIcon)
                 }
-                .buttonStyle(.bordered)
-                .help("Переключить тему")
+                .menuStyle(.borderedButton)
+                .fixedSize()
+                .help("Тема: \(currentThemeName)")
                 
                 Button(action: {
                     viewModel.showSettings = true
@@ -175,7 +205,8 @@ struct FooterView: View {
                         .foregroundColor(.secondary)
                     
                     if viewModel.totalOriginalSize > 0 {
-                        Text("Размер: \(ByteCountFormatter.string(fromByteCount: viewModel.totalOriginalSize, countStyle: .file))")
+                        let sizeString = ByteCountFormatter.string(fromByteCount: viewModel.totalOriginalSize, countStyle: .file)
+                        Text("Размер: \(sizeString)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

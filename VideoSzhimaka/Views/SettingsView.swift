@@ -37,28 +37,33 @@ struct SettingsView: View {
             // Settings Content
             ScrollView {
                 VStack(spacing: 24) {
+                    // General Section (Language)
+                    SettingsSection(title: NSLocalizedString("Общие", comment: ""), icon: "gearshape") {
+                        GeneralSettingsView(viewModel: viewModel)
+                    }
+                    
                     // Video Quality Section
-                    SettingsSection(title: "Качество видео", icon: "video") {
+                    SettingsSection(title: NSLocalizedString("Качество видео", comment: ""), icon: "video") {
                         CRFSettingsView(viewModel: viewModel)
                     }
                     
                     // Codec Section
-                    SettingsSection(title: "Кодек", icon: "gear") {
+                    SettingsSection(title: NSLocalizedString("Кодек", comment: ""), icon: "gear") {
                         CodecSettingsView(viewModel: viewModel)
                     }
                     
                     // Audio Section
-                    SettingsSection(title: "Аудио", icon: "speaker.wave.2") {
+                    SettingsSection(title: NSLocalizedString("Аудио", comment: ""), icon: "speaker.wave.2") {
                         AudioSettingsView(viewModel: viewModel)
                     }
                     
                     // Behavior Section
-                    SettingsSection(title: "Поведение", icon: "slider.horizontal.3") {
+                    SettingsSection(title: NSLocalizedString("Поведение", comment: ""), icon: "slider.horizontal.3") {
                         BehaviorSettingsView(viewModel: viewModel)
                     }
                     
                     // App Display Section
-                    SettingsSection(title: "Отображение приложения", icon: "macwindow") {
+                    SettingsSection(title: NSLocalizedString("Отображение приложения", comment: ""), icon: "macwindow") {
                         AppDisplaySettingsView(viewModel: viewModel)
                     }
                     
@@ -71,34 +76,42 @@ struct SettingsView: View {
         .frame(width: 500, height: 600)
         .background(Color.adaptiveBackground)
         .confirmationDialog(
-            "Сбросить настройки",
+            NSLocalizedString("Сброс настроек", comment: ""),
             isPresented: $viewModel.showResetConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Сбросить", role: .destructive) {
+            Button(NSLocalizedString("Сбросить", comment: ""), role: .destructive) {
                 viewModel.confirmResetToDefaults()
             }
-            Button("Отмена", role: .cancel) {}
+            Button(NSLocalizedString("Отмена", comment: ""), role: .cancel) {}
         } message: {
-            Text("Все настройки будут сброшены к значениям по умолчанию. Это действие нельзя отменить.")
+            Text(NSLocalizedString("Все настройки будут сброшены к значениям по умолчанию. Это действие нельзя отменить.", comment: ""))
         }
         .interactiveDismissDisabled(viewModel.hasUnsavedChanges)
         .confirmationDialog(
-            "Сохранить изменения?",
+            NSLocalizedString("Сохранить изменения?", comment: ""),
             isPresented: $showUnsavedChangesConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Сохранить изменения") {
+            Button(NSLocalizedString("Сохранить", comment: "")) {
                 viewModel.saveSettings()
                 dismiss()
             }
-            Button("Не сохранять", role: .destructive) {
+            Button(NSLocalizedString("Не сохранять", comment: ""), role: .destructive) {
                 viewModel.discardChanges()
                 dismiss()
             }
-            Button("Отмена", role: .cancel) {}
+            Button(NSLocalizedString("Отмена", comment: ""), role: .cancel) {}
         } message: {
-            Text("Есть несохранённые изменения. Сохранить их перед закрытием?")
+            Text(NSLocalizedString("Есть несохранённые изменения. Сохранить их перед закрытием?", comment: ""))
+        }
+        .alert(NSLocalizedString("Требуется перезапуск", comment: ""), isPresented: $viewModel.restartRequired) {
+            Button(NSLocalizedString("Перезапустить сейчас", comment: "")) {
+                NSApp.terminate(nil) // Relaunch logic is complex, simpler to just quit
+            }
+            Button(NSLocalizedString("Позже", comment: "")) {}
+        } message: {
+            Text(NSLocalizedString("Чтобы изменить язык, необходимо перезапустить приложение", comment: ""))
         }
     }
 
@@ -121,7 +134,7 @@ struct SettingsHeaderView: View {
     
     var body: some View {
         HStack {
-            Text("Настройки")
+            Text(NSLocalizedString("Настройки", comment: ""))
                 .font(.title2)
                 .fontWeight(.semibold)
             
@@ -129,15 +142,15 @@ struct SettingsHeaderView: View {
             
             if hasUnsavedChanges {
                 HStack(spacing: 8) {
-                    Button("Отменить", action: onDiscard)
+                    Button(NSLocalizedString("Отменить", comment: ""), action: onDiscard)
                         .buttonStyle(.plain)
                         .foregroundColor(.secondary)
                     
-                    Button("Сохранить", action: onSave)
+                    Button(NSLocalizedString("Сохранить", comment: ""), action: onSave)
                         .buttonStyle(.borderedProminent)
                 }
             } else {
-                Button("Готово", action: onClose)
+                Button(NSLocalizedString("Готово", comment: ""), action: onClose)
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -171,6 +184,28 @@ struct SettingsSection<Content: View>: View {
             .padding(.leading, 24)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - General Settings
+
+struct GeneralSettingsView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString("Язык", comment: ""))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.language) {
+                ForEach(AppLanguage.allCases) { lang in
+                    Text(lang.localizedName).tag(lang)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+        }
     }
 }
 
@@ -228,16 +263,17 @@ struct CodecSettingsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Видеокодек")
+            Text(NSLocalizedString("Кодек", comment: ""))
                 .font(.subheadline)
                 .fontWeight(.medium)
             
-            Picker("Кодек", selection: $viewModel.settings.codec) {
+            Picker("", selection: $viewModel.settings.codec) {
                 ForEach(VideoCodec.allCases, id: \.self) { codec in
                     Text(codec.displayName)
                         .tag(codec)
                 }
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
             .onChange(of: viewModel.settings.codec) { newCodec in
                 viewModel.updateCodec(newCodec)
@@ -251,17 +287,17 @@ struct CodecSettingsView: View {
             if viewModel.settings.codec == .h265 {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.caption)
-                    
-                    Text("H.265 поддерживается не на всех устройствах")
+                    .foregroundColor(.orange)
+                    .font(.caption)
+                
+                    Text(NSLocalizedString("H.265 поддерживается не на всех устройствах", comment: ""))
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
                 .padding(.top, 4)
             }
             
-            Toggle("Использовать аппаратное ускорение", isOn: $viewModel.settings.useHardwareAcceleration)
+            Toggle(NSLocalizedString("Использовать аппаратное ускорение", comment: ""), isOn: $viewModel.settings.useHardwareAcceleration)
                 .font(.subheadline)
         }
     }
@@ -274,12 +310,12 @@ struct AudioSettingsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Не перекодировать аудио", isOn: $viewModel.settings.copyAudio)
+            Toggle(NSLocalizedString("Не перекодировать аудио", comment: ""), isOn: $viewModel.settings.copyAudio)
                 .font(.subheadline)
             
             Text(viewModel.settings.copyAudio ? 
-                 "Аудиодорожка будет скопирована без изменений" : 
-                 "Аудио будет перекодировано в AAC 128kbps")
+                 NSLocalizedString("Аудиодорожка будет скопирована без изменений", comment: "") : 
+                 NSLocalizedString("Аудио будет перекодировано в AAC 128kbps", comment: ""))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -290,14 +326,36 @@ struct AudioSettingsView: View {
 
 struct BehaviorSettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @Environment(\.dismiss) private var dismiss // Add this
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Удалять оригинальные файлы после сжатия", isOn: $viewModel.settings.deleteOriginals)
+            Toggle(NSLocalizedString("Удалять оригинальные файлы после сжатия", comment: ""), isOn: $viewModel.settings.deleteOriginals)
                 .font(.subheadline)
             
-            Toggle("Автоматически закрыть приложение после завершения", isOn: $viewModel.settings.autoCloseApp)
+            Toggle(NSLocalizedString("Автоматически закрыть приложение после завершения", comment: ""), isOn: $viewModel.settings.autoCloseApp)
                 .font(.subheadline)
+            
+            Divider()
+            
+            Button(action: {
+                NotificationCenter.default.post(name: .openLogs, object: nil)
+                // Dismiss settings will be handled by the parent view/notification observer logic if needed, 
+                // but usually we want to keep settings open or close it explicitly. 
+                // User asked to "show logs", usually implies bringing logs window to front.
+                // We'll close settings to show the logs clearly.
+                // Using NotificationCenter to trigger this actions allows decoupling.
+                // We should dismiss this view too.
+                // Note: The parent view will receive the notification and show the logs.
+                // We dismiss this view to make sure the logs are visible if they are presented as a sheet on the main view.
+                dismiss() // This will now work
+            }) {
+                HStack {
+                    Image(systemName: "list.bullet.rectangle")
+                    Text(NSLocalizedString("Показать логи", comment: ""))
+                }
+            }
+            .buttonStyle(.bordered)
         }
     }
 }
@@ -309,19 +367,25 @@ struct AppDisplaySettingsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle("Показывать в Dock", isOn: $viewModel.settings.showInDock)
+            Text(NSLocalizedString("Режим отображения", comment: ""))
                 .font(.subheadline)
+                .fontWeight(.medium)
             
-            Toggle("Показывать в меню-баре", isOn: $viewModel.settings.showInMenuBar)
-                .font(.subheadline)
+            Picker("", selection: $viewModel.settings.displayMode) {
+                ForEach(AppDisplayMode.allCases) { mode in
+                    Text(mode.localizedName).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.radioGroup)
             
             if !viewModel.settings.showInDock && !viewModel.settings.showInMenuBar {
-                HStack(spacing: 6) {
+                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
                         .font(.caption)
                     
-                    Text("Приложение должно отображаться либо в Dock, либо в меню-баре")
+                    Text(NSLocalizedString("Приложение должно отображаться либо в Dock, либо в меню-баре", comment: ""))
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
@@ -341,18 +405,18 @@ struct ResetSettingsView: View {
             
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Сброс настроек")
+                    Text(NSLocalizedString("Сброс настроек", comment: ""))
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
-                    Text("Вернуть все настройки к значениям по умолчанию")
+                    Text(NSLocalizedString("Вернуть все настройки к значениям по умолчанию", comment: ""))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
                 Spacer()
                 
-                Button("Сбросить") {
+                Button(NSLocalizedString("Сбросить", comment: "")) {
                     viewModel.showResetConfirmation = true
                 }
                 .buttonStyle(.bordered)

@@ -1,5 +1,47 @@
 import Foundation
 
+/// Application display mode
+enum AppDisplayMode: String, CaseIterable, Identifiable, Codable {
+    case dockAndMenuBar
+    case dockOnly
+    case menuBarOnly
+    
+    var id: String { rawValue }
+    
+    var localizedName: String {
+        switch self {
+        case .dockAndMenuBar: return NSLocalizedString("Dock и меню-бар", comment: "")
+        case .dockOnly: return NSLocalizedString("Только Dock", comment: "")
+        case .menuBarOnly: return NSLocalizedString("Только меню-бар", comment: "")
+        }
+    }
+}
+
+/// Application language
+enum AppLanguage: String, CaseIterable, Identifiable, Codable {
+    case system
+    case english
+    case russian
+    
+    var id: String { rawValue }
+    
+    var localizedName: String {
+        switch self {
+        case .system: return NSLocalizedString("Системный", comment: "")
+        case .english: return "English"
+        case .russian: return "Русский"
+        }
+    }
+    
+    var languageCode: String? {
+        switch self {
+        case .system: return nil
+        case .english: return "en"
+        case .russian: return "ru"
+        }
+    }
+}
+
 /// Configuration settings for video compression
 struct CompressionSettings: Codable, Equatable {
     /// Constant Rate Factor (CRF) value for quality control (18-28)
@@ -26,6 +68,32 @@ struct CompressionSettings: Codable, Equatable {
     /// Whether to use hardware acceleration when available
     var useHardwareAcceleration: Bool = true
     
+    /// Application language preference
+    var language: AppLanguage = .system
+    
+    /// Computed display mode helper
+    var displayMode: AppDisplayMode {
+        get {
+            if showInDock && showInMenuBar { return .dockAndMenuBar }
+            if showInDock { return .dockOnly }
+            if showInMenuBar { return .menuBarOnly }
+            return .dockAndMenuBar // Default fallback
+        }
+        set {
+            switch newValue {
+            case .dockAndMenuBar:
+                showInDock = true
+                showInMenuBar = true
+            case .dockOnly:
+                showInDock = true
+                showInMenuBar = false
+            case .menuBarOnly:
+                showInDock = false
+                showInMenuBar = true
+            }
+        }
+    }
+    
     /// Initialize with default settings
     init() {}
     
@@ -38,7 +106,8 @@ struct CompressionSettings: Codable, Equatable {
         autoCloseApp: Bool = false,
         showInDock: Bool = true,
         showInMenuBar: Bool = true,
-        useHardwareAcceleration: Bool = true
+        useHardwareAcceleration: Bool = true,
+        language: AppLanguage = .system
     ) {
         self.crf = Self.clampCRF(crf, for: codec)
         self.codec = codec
@@ -48,6 +117,7 @@ struct CompressionSettings: Codable, Equatable {
         self.showInDock = showInDock
         self.showInMenuBar = showInMenuBar
         self.useHardwareAcceleration = useHardwareAcceleration
+        self.language = language
     }
     
     /// Clamp CRF value to valid range for the given codec
