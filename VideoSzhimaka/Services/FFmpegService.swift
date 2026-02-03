@@ -793,7 +793,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         }
         
         // Мониторим процесс с использованием локальной ссылки
-        while isMonitoringActive && processReference.isRunning {
+        while isMonitoringActive {
             // Проверяем глобальное состояние отмены
             if currentProcess == nil {
                 logger.info("Progress monitoring stopped - global cancellation detected")
@@ -811,15 +811,10 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             }
             
             if data.isEmpty {
-                // Используем async sleep вместо usleep
-                do {
-                    try await Task.sleep(nanoseconds: 50_000_000) // 50ms
-                } catch {
-                    // Task was cancelled
-                    logger.info("Progress monitoring task cancelled")
-                    break
-                }
-                continue
+                // Пустые данные из pipe означают EOF (процесс закрыл поток/завершился)
+                logger.info("Pipe EOF detected, stopping progress monitoring")
+                isMonitoringActive = false
+                break
             }
             
             guard let newOutput = String(data: data, encoding: .utf8) else { 
