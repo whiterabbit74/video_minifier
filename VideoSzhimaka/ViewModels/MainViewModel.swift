@@ -281,7 +281,7 @@ class MainViewModel: ObservableObject {
         currentCompressionTask = Task {
             do {
                 try Task.checkCancellation()
-                await compressFileAtIndex(fileIndex)
+                await compressFile(withId: fileId)
                 
                 // Check if task was cancelled before processing next file
                 try Task.checkCancellation()
@@ -305,17 +305,16 @@ class MainViewModel: ObservableObject {
         }
     }
     
-    /// Compress the file at the specified index
-    /// - Parameter index: Index of the file in the videoFiles array
-    private func compressFileAtIndex(_ index: Int) async {
-        // Safely get the file and validate index bounds
-        guard index >= 0 && index < videoFiles.count else {
-            loggingService.error("Недопустимый индекс файла: \(index), размер массива: \(videoFiles.count)", category: "Compression")
+    /// Compress the file with the specified ID
+    /// - Parameter fileId: ID of the file to compress
+    private func compressFile(withId fileId: UUID) async {
+        // Safely get the file
+        guard let index = videoFiles.firstIndex(where: { $0.id == fileId }) else {
+            loggingService.error("Файл не найден для сжатия: \(fileId)", category: "Compression")
             return
         }
         
         let file = videoFiles[index]
-        let fileId = file.id
         
         do {
             // Check for cancellation before starting
