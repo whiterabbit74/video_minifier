@@ -7,6 +7,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
     private var ffmpegPath: String
     private var currentProcess: Process?
     private var currentProgressTask: Task<Void, Never>?
+    private let stateLock = NSLock()
     private let processQueue = DispatchQueue(label: "ffmpeg.processing", qos: .userInitiated)
     
     // Кэш для метаданных видео (ключ: путь к файлу + размер + дата модификации)
@@ -200,6 +201,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         processQueue.async { [weak self] in
             guard let self = self else { return }
             
+            self.stateLock.lock()
             // Сохраняем ссылки перед очисткой
             let processToTerminate = self.currentProcess
             let progressTaskToCancel = self.currentProgressTask
@@ -207,6 +209,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             // Сразу очищаем состояние, чтобы сигнализировать об отмене
             self.currentProcess = nil
             self.currentProgressTask = nil
+            self.stateLock.unlock()
             
             // Отменяем задачу мониторинга прогресса
             progressTaskToCancel?.cancel()
@@ -636,7 +639,9 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         process.standardOutput = Pipe()
         
         // Сохраняем ссылку на процесс для возможности отмены
+        stateLock.lock()
         currentProcess = process
+        stateLock.unlock()
 
         // Ожидание завершения процесса с установкой terminationHandler ДО запуска
         do {
@@ -662,7 +667,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                     self.logger.info("FFmpeg process terminated with status: \(exitCode), reason: \(String(describing: reason))")
 
                     // Проверяем, была ли операция отменена
-                    if self.currentProcess == nil {
+                    self.stateLock.lock()
+                    let isCancelled = self.currentProcess == nil
+                    self.stateLock.unlock()
+
+                    if isCancelled {
                         self.logger.info("Process was cancelled by user")
                         safeContinuation(.failure(VideoCompressionError.cancelled))
                         return
@@ -695,7 +704,12 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                 Task {
                     while process.isRunning {
                         try? await Task.sleep(nanoseconds: 200_000_000)
-                        if currentProcess == nil {
+
+                        self.stateLock.lock()
+                        let isCancelled = self.currentProcess == nil
+                        self.stateLock.unlock()
+
+                        if isCancelled {
                             logger.info("Process cancellation detected, terminating FFmpeg")
                             if process.isRunning {
                                 process.terminate()
@@ -714,7 +728,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                     try process.run()
 
                     // Проверяем, что процесс не был отменен сразу после запуска
-                    if currentProcess == nil {
+                    self.stateLock.lock()
+                    let isCancelled = self.currentProcess == nil
+                    self.stateLock.unlock()
+
+                    if isCancelled {
                         logger.info("Process was cancelled immediately after start")
                         if process.isRunning { process.terminate() }
                         safeContinuation(.failure(VideoCompressionError.cancelled))
@@ -730,7 +748,9 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                             processReference: process
                         )
                     }
-                    currentProgressTask = progressTask
+                    self.stateLock.lock()
+                    self.currentProgressTask = progressTask
+                    self.stateLock.unlock()
 
                 } catch {
                     // Не удалось запустить процесс
@@ -744,24 +764,34 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             process.terminationHandler = nil
 
             // Финальная проверка отмены
-            guard currentProcess != nil else {
+            self.stateLock.lock()
+            let isCancelled = self.currentProcess == nil
+            self.stateLock.unlock()
+
+            guard !isCancelled else {
                 logger.info("Process was cancelled after completion")
                 throw VideoCompressionError.cancelled
             }
 
         } catch let error as VideoCompressionError {
+            self.stateLock.lock()
             currentProcess = nil
             currentProgressTask = nil
+            self.stateLock.unlock()
             throw error
         } catch {
+            self.stateLock.lock()
             currentProcess = nil
             currentProgressTask = nil
+            self.stateLock.unlock()
             logger.error("Process execution failed: \(error)")
             throw VideoCompressionError.compressionFailed("Process execution failed: \(error.localizedDescription)")
         }
         
+        self.stateLock.lock()
         currentProcess = nil
         currentProgressTask = nil
+        self.stateLock.unlock()
         
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
@@ -795,7 +825,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         // Мониторим процесс с использованием локальной ссылки
         while isMonitoringActive && processReference.isRunning {
             // Проверяем глобальное состояние отмены
-            if currentProcess == nil {
+            self.stateLock.lock()
+            let isCancelled = self.currentProcess == nil
+            self.stateLock.unlock()
+
+            if isCancelled {
                 logger.info("Progress monitoring stopped - global cancellation detected")
                 isMonitoringActive = false
                 break
@@ -839,7 +873,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                         lastProgress = progress
                         
                         // Проверяем состояние отмены перед обновлением UI
-                        if currentProcess != nil {
+                        self.stateLock.lock()
+                        let isCancelled = self.currentProcess == nil
+                        self.stateLock.unlock()
+
+                        if !isCancelled {
                             DispatchQueue.main.async {
                                 progressHandler(progress)
                             }
@@ -855,7 +893,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         
         // Безопасная финальная проверка прогресса
         // Проверяем только если мониторинг завершился естественным образом
-        if isMonitoringActive && currentProcess != nil && !processReference.isRunning {
+        self.stateLock.lock()
+        let isCancelled = self.currentProcess == nil
+        self.stateLock.unlock()
+
+        if isMonitoringActive && !isCancelled && !processReference.isRunning {
             let terminationStatus = processReference.terminationStatus
             if terminationStatus == 0 && lastProgress < 1.0 {
                 logger.info("Setting final progress to 100% (process completed successfully)")
