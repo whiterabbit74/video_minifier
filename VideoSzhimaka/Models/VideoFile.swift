@@ -3,7 +3,7 @@ import Foundation
 /// Represents a video file in the compression queue
 struct VideoFile: Identifiable, Codable {
     /// Unique identifier for the video file
-    let id = UUID()
+    let id: UUID
 
     /// Original URL path to the video file (used for reprocessing/deletion)
     let originalURL: URL
@@ -31,11 +31,12 @@ struct VideoFile: Identifiable, Codable {
     
     /// Custom coding keys to handle UUID serialization
     private enum CodingKeys: String, CodingKey {
-        case url, name, duration, originalSize, compressedSize, compressionProgress, status, originalURL
+        case id, url, name, duration, originalSize, compressedSize, compressionProgress, status, originalURL
     }
     
     /// Initialize a new VideoFile
     init(url: URL, name: String, duration: TimeInterval, originalSize: Int64) {
+        self.id = UUID()
         self.originalURL = url
         self.url = url
         self.name = name
@@ -51,6 +52,7 @@ extension VideoFile {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let decodedURL = try container.decode(URL.self, forKey: .url)
 
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.url = decodedURL
         self.originalURL = try container.decodeIfPresent(URL.self, forKey: .originalURL) ?? decodedURL
         self.name = try container.decode(String.self, forKey: .name)
@@ -63,6 +65,7 @@ extension VideoFile {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encode(url, forKey: .url)
         try container.encode(originalURL, forKey: .originalURL)
         try container.encode(name, forKey: .name)
