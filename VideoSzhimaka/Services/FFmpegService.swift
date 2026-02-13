@@ -62,15 +62,17 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             throw VideoCompressionError.ffmpegNotFound
         }
         
-        // Тестируем, что найденный бинарник может быть запущен
-        if try testFFmpegBinary(at: validPath) {
-            self.ffmpegPath = validPath
-            logger.info("FFmpeg service initialized with bundled binary: \(validPath)")
-            return
-        } else {
-            logger.error("Bundled FFmpeg binary failed to run: \(validPath)")
+        // На старте приложения избегаем запуска внешнего процесса, чтобы не блокировать UI.
+        // Достаточно проверить наличие и исполняемость бинарника; реальные ошибки запуска
+        // будут корректно обработаны при фактическом вызове FFmpeg.
+        guard FileManager.default.isExecutableFile(atPath: validPath) else {
+            logger.error("Bundled FFmpeg binary is not executable: \(validPath)")
             throw VideoCompressionError.ffmpegNotFound
         }
+
+        self.ffmpegPath = validPath
+        logger.info("FFmpeg service initialized with bundled binary: \(validPath)")
+        return
     }
 
     private func withStateLock<T>(_ block: () -> T) -> T {
