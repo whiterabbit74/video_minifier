@@ -17,7 +17,7 @@ enum CompressionStatus: Codable, Equatable {
     // MARK: - Codable Implementation
     
     private enum CodingKeys: String, CodingKey {
-        case type, errorMessage
+        case type, error, errorMessage
     }
     
     private enum StatusType: String, Codable {
@@ -36,8 +36,13 @@ enum CompressionStatus: Codable, Equatable {
         case .completed:
             self = .completed
         case .failed:
-            let errorMessage = try container.decode(String.self, forKey: .errorMessage)
-            self = .failed(.unknownError(errorMessage))
+            if let decodedError = try container.decodeIfPresent(VideoCompressionError.self, forKey: .error) {
+                self = .failed(decodedError)
+            } else {
+                // Backward compatibility for older payloads.
+                let errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage) ?? "Unknown error"
+                self = .failed(.unknownError(errorMessage))
+            }
         }
     }
     
@@ -53,6 +58,8 @@ enum CompressionStatus: Codable, Equatable {
             try container.encode(StatusType.completed, forKey: .type)
         case .failed(let error):
             try container.encode(StatusType.failed, forKey: .type)
+            try container.encode(error, forKey: .error)
+            // Keep the legacy field for compatibility with older app versions.
             try container.encode(error.localizedDescription, forKey: .errorMessage)
         }
     }
@@ -66,7 +73,7 @@ enum CompressionStatus: Codable, Equatable {
              (.completed, .completed):
             return true
         case (.failed(let lhsError), .failed(let rhsError)):
-            return lhsError.localizedDescription == rhsError.localizedDescription
+            return lhsError == rhsError
         default:
             return false
         }
@@ -80,13 +87,13 @@ extension CompressionStatus {
     var displayText: String {
         switch self {
         case .pending:
-            return "Ожидает"
+            return NSLocalizedString("Ожидает", comment: "")
         case .compressing:
-            return "Сжимается"
+            return NSLocalizedString("Сжимается", comment: "")
         case .completed:
-            return "Завершено"
+            return NSLocalizedString("Завершено", comment: "")
         case .failed(let error):
-            return "Ошибка: \(error.localizedDescription)"
+            return String(format: NSLocalizedString("Ошибка: %@", comment: ""), error.localizedDescription)
         }
     }
     

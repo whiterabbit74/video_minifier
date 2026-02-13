@@ -5,12 +5,18 @@ protocol FileManagerServiceProtocol {
     /// Generate a unique output URL for a compressed video file
     /// - Parameter inputURL: The original video file URL
     /// - Returns: A unique URL for the compressed output file
-    func generateOutputURL(for inputURL: URL) -> URL
+    func generateOutputURL(for inputURL: URL, behavior: OutputBehavior) -> URL
     
     /// Delete a file at the specified URL
     /// - Parameter url: The URL of the file to delete
     /// - Throws: FileManagerError if deletion fails
     func deleteFile(at url: URL) throws
+
+    /// Move or replace a file at destination
+    /// - Parameters:
+    ///   - sourceURL: The file to move
+    ///   - destinationURL: The destination URL
+    func moveFile(from sourceURL: URL, to destinationURL: URL) throws
     
     /// Open a file or folder in Finder
     /// - Parameter url: The URL to open in Finder
@@ -38,13 +44,13 @@ enum FileManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .fileNotFound(let url):
-            return "Файл не найден: \(url.lastPathComponent)"
+            return String(format: NSLocalizedString("Файл не найден: %@", comment: ""), url.lastPathComponent)
         case .deletionFailed(let url, let error):
-            return "Не удалось удалить файл \(url.lastPathComponent): \(error.localizedDescription)"
+            return String(format: NSLocalizedString("Не удалось удалить файл %@: %@", comment: ""), url.lastPathComponent, error.localizedDescription)
         case .sizeCalculationFailed(let url, let error):
-            return "Не удалось получить размер файла \(url.lastPathComponent): \(error.localizedDescription)"
+            return String(format: NSLocalizedString("Не удалось получить размер файла %@: %@", comment: ""), url.lastPathComponent, error.localizedDescription)
         case .invalidURL(let url):
-            return "Некорректный URL: \(url.absoluteString)"
+            return String(format: NSLocalizedString("Некорректный URL: %@", comment: ""), url.absoluteString)
         }
     }
 }

@@ -32,6 +32,7 @@ final class SettingsService: SettingsServiceProtocol {
         
         // Load settings on initialization
         loadSettings()
+        applyLanguagePreference()
         
         // Set up automatic saving when settings change
         setupAutoSave()
@@ -70,12 +71,10 @@ final class SettingsService: SettingsServiceProtocol {
     }
     
     func saveSettings() {
+        applyLanguagePreference()
         do {
             let data = try JSONEncoder().encode(settings)
             userDefaults.set(data, forKey: Keys.compressionSettings)
-            
-            // Force synchronization to ensure data is written
-            userDefaults.synchronize()
         } catch {
             print("❌ Failed to encode settings: \(error)")
         }
@@ -97,7 +96,6 @@ final class SettingsService: SettingsServiceProtocol {
         ]
         
         userDefaults.set(frameDict, forKey: Keys.windowFrame)
-        userDefaults.synchronize()
     }
     
     func loadWindowFrame() -> CGRect? {
@@ -121,7 +119,6 @@ final class SettingsService: SettingsServiceProtocol {
         ]
         
         userDefaults.set(frameDict, forKey: Keys.logsWindowFrame)
-        userDefaults.synchronize()
     }
     
     func loadLogsWindowFrame() -> CGRect? {
@@ -143,7 +140,6 @@ final class SettingsService: SettingsServiceProtocol {
         userDefaults.removeObject(forKey: Keys.windowFrame)
         userDefaults.removeObject(forKey: Keys.logsWindowFrame)
         userDefaults.removeObject(forKey: Keys.hasLaunchedBefore)
-        userDefaults.synchronize()
         
         // Reset to defaults
         settings = CompressionSettings.default
@@ -157,6 +153,7 @@ final class SettingsService: SettingsServiceProtocol {
             .dropFirst()
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.applyLanguagePreference()
                 self?.saveSettings()
             }
             .store(in: &cancellables)
@@ -165,9 +162,19 @@ final class SettingsService: SettingsServiceProtocol {
     private func markFirstLaunchIfNeeded() {
         if !userDefaults.bool(forKey: Keys.hasLaunchedBefore) {
             userDefaults.set(true, forKey: Keys.hasLaunchedBefore)
-            userDefaults.synchronize()
         }
     }
+
+    private func applyLanguagePreference() {
+        if let code = settings.language.languageCode {
+            userDefaults.set([code], forKey: "AppleLanguages")
+        } else {
+            userDefaults.removeObject(forKey: "AppleLanguages")
+        }
+        userDefaults.synchronize()
+    }
+    
+
 }
 
 // MARK: - SettingsService Extensions

@@ -1,133 +1,155 @@
-## VideoSzhimaka
+# Видео-Сжимака
+### Продающий обзор приложения для презентации и размещения
 
-A fast, native macOS app for batch video compression built with SwiftUI. It wraps a bundled FFmpeg binary with a friendly UI, drag-and-drop, detailed logging, and robust error handling.
-
-- **Platform**: macOS (Apple Silicon only, arm64)
-- **Minimum macOS**: 12.0 (Monterey)
-- **Language/Frameworks**: Swift 5, SwiftUI, AppKit
-- **Primary binary**: `FFmpeg` (bundled)
-
-### Why VideoSzhimaka?
-- **Batch compression**: Drop multiple videos and compress them at once
-- **Simple UI**: Drag-and-drop, progress per file, quick actions
-- **Safe by default**: Error surfacing, retry support, and log viewer
-- **Tunable**: Compression settings, theme toggle, Dock/Menu Bar presence
+> Сжимайте видео быстро, без сложных настроек и без потери контроля.  
+> Видео-Сжимака превращает "тяжелые" ролики в удобные файлы для отправки, публикации и хранения.
 
 ---
 
-## Requirements
-- Mac with **Apple Silicon (M1/M2/M3)**. Intel Macs are not supported.
-- macOS **12.0+**
-- Xcode **14+** (recommended 15+)
+## Почему это приложение хочется поставить
 
-The app enforces native Apple Silicon execution and will show an incompatibility alert on Intel/Rosetta.
+**Видео-Сжимака** экономит место и время: вы добавляете файлы, выбираете нужный режим и получаете более легкие видео с понятным результатом по каждому ролику.  
+Без перегруженного интерфейса, без лишней рутины, с ощущением, что все под контролем.
 
 ---
 
-## Getting Started
+## Что умеет приложение
 
-### Open in Xcode
-1. Open `VideoSzhimaka.xcodeproj` in Xcode
-2. Select the scheme: `VideoSzhimaka`
-3. Choose a destination: `My Mac (Apple Silicon)`
-4. Run (⌘R)
+### 1) Быстрое сжатие в пару кликов
+- Перетаскивание файлов в окно (`drag-and-drop`)
+- Пакетная очередь: можно сжимать сразу много роликов
+- Поддержка популярных форматов: `MP4`, `MOV`, `MKV`, `AVI`, `WEBM`, `FLV`, `WMV`, `M4V`
 
-### Build via CLI
-```bash
-# Build the app
-xcodebuild -scheme VideoSzhimaka \
-  -configuration Release \
-  -destination 'platform=macOS,arch=arm64' \
-  build
+### 2) Гибкое качество под задачу
+- Готовые пресеты качества: от "очень высокого" до "минимального размера"
+- Режимы контроля результата: по качеству (`CRF`), по целевому битрейту, по целевому размеру файла
+- Выбор кодека: `H.264` (совместимость) и `H.265` (лучшее сжатие)
 
-# Run unit and UI tests
-xcodebuild test -scheme VideoSzhimaka \
-  -destination 'platform=macOS,arch=arm64'
-```
+### 3) Продуманный контроль результата
+- Видно прогресс по каждому файлу
+- Сразу показывается, насколько файл уменьшился в процентах
+- Если файл после сжатия неожиданно стал больше, приложение это явно подсветит
+- Можно быстро открыть файл в Finder
 
-Notes:
-- Deployment target: `macOS 12.0`
-- Bundle identifier: `com.videoszhimaka.VideoSzhimaka`
+### 4) Гибкая работа с выходными файлами
+- Добавлять суффикс `_compressed`
+- Складывать результаты в отдельную папку `compressed`
+- Или заменять оригинал (при этом приложение защищает от неудачной замены)
 
----
+### 5) Автоматизация рутины
+- Мониторинг папки: новые видео подхватываются автоматически
+- Можно назначить пресет для автосжатия
+- Автозакрытие приложения после завершения очереди
 
-## Usage
-- Launch the app
-- **Drag and drop** video files into the main window or click **Добавить файлы** (Add files)
-- Adjust settings (gear icon or via menu bar item): output formats, performance and behavior toggles
-- Click **Сжать всё** (Compress all)
-- Open **Логи** (Logs) to inspect detailed FFmpeg output and errors if needed
-
-The interface currently uses Russian labels (e.g., "Видео-Сжимака").
+### 6) Комфортная ежедневная работа
+- Светлая, темная и системная тема
+- Работа через Dock и/или меню-бар
+- Логи с поиском, фильтрами и экспортом
+- Мультиязычный интерфейс (русский, английский и др.)
 
 ---
 
-## FFmpeg and Licensing
-The app bundles an FFmpeg binary for convenience.
+## Чем Видео-Сжимака выгодно отличается
 
-- Location (runtime resource):
-  - `VideoSzhimaka/Resources/bin/ffmpeg`
-- License:
-  - `VideoSzhimaka/Resources/LICENSES/FFmpeg_LICENSE.txt`
+### 1) Не просто "конвертер", а рабочий инструмент
+Приложение не заканчивается кнопкой "Сжать": здесь есть очередь, понятный статус каждого файла, статистика сэкономленного места и безопасная обработка спорных случаев.
 
-You may swap the bundled binary with your own build of FFmpeg if you need different codecs or configurations:
-1. Replace the file at `VideoSzhimaka/Resources/bin/ffmpeg`
-2. Ensure it is executable (`chmod +x`)
-3. Rebuild the app in Xcode
+### 2) Автоматический мониторинг папки
+Редкая для "домашних" сжималок функция: можно настроить папку и получать автосжатие новых видео без ручного запуска каждый раз.
 
-When distributing the app, ensure compliance with FFmpeg’s license terms that apply to your chosen build/configuration.
+### 3) Честный результат, без сюрпризов
+Если итоговый файл оказался больше исходного, это не прячется. Пользователь сразу видит предупреждение и не теряет контроль над оригиналом.
 
----
-
-## Project Structure
-```
-VideoSzhimaka/
-  Models/                  # Video domain models and states
-  Views/                   # SwiftUI views (main, settings, logs, errors, about)
-  ViewModels/              # Main and Settings view models
-  Services/                # FFmpeg, FileManager, Settings, Logging, Performance
-  Utilities/               # Helpers, extensions, optimizations
-  Resources/               # Bundled assets (ffmpeg, licenses)
-  Assets.xcassets          # App icons and colors
-  Info.plist               # App configuration
-  VideoSzhimakaApp.swift   # App entry and app delegate
-
-VideoSzhimakaTests/
-  ...                      # Unit, UI, integration, performance tests
-```
+### 4) Реально удобно для потока задач
+Подходит для контент-мейкеров, менеджеров, продюсеров, команд продаж и всех, кто регулярно отправляет видео в мессенджеры, CRM, почту или соцсети.
 
 ---
 
-## Testing
-Run tests in Xcode (⌘U) or via CLI (see above). The test suite includes:
-- Unit tests for services (FFmpeg, FileManager, Logging, Settings)
-- View model tests (main/settings)
-- UI and end‑to‑end tests (drag & drop, flows)
-- Performance and crash/regression coverage
+## Польза для пользователя в одном экране
+
+| Было | Стало | Выгода |
+|---|---|---|
+| Тяжелые ролики, которые неудобно отправлять | Более легкие файлы | Быстрее отправка и загрузка |
+| Хаос в ручных конвертерах | Очередь и пресеты | Меньше рутины |
+| Неясно, что получилось | Видимый прогресс и статистика | Понятный, предсказуемый результат |
+| Риск потерять исходник | Безопасные сценарии вывода | Спокойная работа без паники |
 
 ---
 
-## Troubleshooting
-- "Incompatible architecture" alert on launch: The app only supports Apple Silicon (arm64).
-- FFmpeg not executing:
-  - Confirm the binary exists at `VideoSzhimaka/Resources/bin/ffmpeg`
-  - Ensure executable bit: `chmod +x VideoSzhimaka/Resources/bin/ffmpeg`
-  - If macOS quarantines a locally replaced binary, you may need to remove quarantine attributes before development signing: `xattr -dr com.apple.quarantine VideoSzhimaka/Resources/bin/ffmpeg`
-- Codesigning for distribution:
-  - The project uses automatic signing for development. Configure your team/profile for notarized distribution.
+## Сценарии, где приложение "окупается" сразу
+
+- Подготовка видео для Telegram/WhatsApp/почты без ручной возни
+- Массовая оптимизация архивов, чтобы освободить место на Mac
+- Быстрый прогон "сырого" контента перед передачей клиенту
+- Фоновая обработка через мониторинг папки в течение дня
 
 ---
 
-## Localization
-Current UI strings are in Russian. SwiftUI makes adding additional localizations straightforward.
+## Системные требования
+
+- macOS 12 и выше
+- Mac с Apple Silicon (`M1/M2/M3`)
 
 ---
 
-## License
-- App: © 2025 Видео-Сжимака. All rights reserved.
-- FFmpeg: See `VideoSzhimaka/Resources/LICENSES/FFmpeg_LICENSE.txt` and comply with applicable license options for your build.
+## Блок скриншотов для презентации
+
+Ниже готовые места под изображения. Сделайте скриншоты по ТЗ и вставьте файлы по указанным путям.
+
+### Скриншот 1. Главный экран (первое впечатление)
+**Что снять:** вкладка "Оптимизация", список из 3-5 видео до старта сжатия, видна кнопка `Сжать всё`.  
+**Файл:** `screenshots/01-main-queue.png`
+
+![Главный экран](screenshots/01-main-queue.png)
+
+### Скриншот 2. Процесс сжатия (динамика)
+**Что снять:** один файл в статусе "Сжимается..." с заметным прогрессом, видна кнопка `Отменить`.  
+**Файл:** `screenshots/02-processing-progress.png`
+
+![Процесс сжатия](screenshots/02-processing-progress.png)
+
+### Скриншот 3. Результат и экономия
+**Что снять:** завершенные файлы с зеленой индикацией и процентом уменьшения размера.  
+**Файл:** `screenshots/03-result-savings.png`
+
+![Результат сжатия](screenshots/03-result-savings.png)
+
+### Скриншот 4. Мониторинг папки (автоматизация)
+**Что снять:** вкладка "Мониторинг" с выбранной папкой, включенным тумблером и статусом "Мониторинг активен".  
+**Файл:** `screenshots/04-folder-monitoring.png`
+
+![Мониторинг папки](screenshots/04-folder-monitoring.png)
+
+### Скриншот 5. Статистика (ценность в цифрах)
+**Что снять:** вкладка "Статистика", чтобы были видны блоки "Экономия" и "Сжатие".  
+**Файл:** `screenshots/05-statistics.png`
+
+![Статистика](screenshots/05-statistics.png)
+
+### Скриншот 6. Настройки и пресеты (гибкость)
+**Что снять:** боковая панель с пресетами + ключевые параметры качества/вывода.  
+**Файл:** `screenshots/06-presets-settings.png`
+
+![Пресеты и настройки](screenshots/06-presets-settings.png)
+
+### Скриншот 7. Логи (доверие и контроль)
+**Что снять:** окно логов с фильтром/поиском и несколькими записями.  
+**Файл:** `screenshots/07-logs.png`
+
+![Логи](screenshots/07-logs.png)
 
 ---
 
-## Acknowledgements
-- FFmpeg (`https://ffmpeg.org`)
+## Короткий продающий текст (можно вставлять в стор, лендинг, пост)
+
+**Видео-Сжимака** - это простой способ быстро уменьшать размер видео на Mac без лишней головной боли.  
+Перетащили файлы, нажали старт, получили легкие ролики с понятной статистикой.  
+Подходит и для разовых задач, и для постоянного потока контента благодаря пресетам и автоматическому мониторингу папок.
+
+---
+
+## CTA-варианты
+
+- **Сжмите первое видео за 30 секунд и сравните размер до/после.**
+- **Настройте папку один раз и забудьте о ручной рутине.**
+- **Освободите гигабайты без потери удобства в работе.**

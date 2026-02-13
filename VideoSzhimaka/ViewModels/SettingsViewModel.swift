@@ -22,8 +22,11 @@ class SettingsViewModel: ObservableObject {
     
     // MARK: - Private Properties
     
+    // MARK: - Private Properties
+    
     private let settingsService: any SettingsServiceProtocol
     private var originalSettings: CompressionSettings
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Initialization
     
@@ -42,23 +45,19 @@ class SettingsViewModel: ObservableObject {
     func saveSettings() {
         // Check if language changed
         if settings.language != originalSettings.language {
-            updateAppLanguage(settings.language)
+            // Flag restart required
             restartRequired = true
         }
         
         settingsService.settings = settings
         settingsService.saveSettings()
+        
+        // We do NOT update originalSettings here if language changed, because we want to track that "change" state 
+        // until the app restarts, or at least keep the restart flag active.
+        // However, for the purpose of "Unsaved Changes" UI, we can consider it saved.
+        // The restart alert is independent of "hasUnsavedChanges".
         originalSettings = settings
         hasUnsavedChanges = false
-    }
-    
-    private func updateAppLanguage(_ language: AppLanguage) {
-        if let code = language.languageCode {
-            UserDefaults.standard.set([code], forKey: "AppleLanguages")
-        } else {
-            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
-        }
-        UserDefaults.standard.synchronize()
     }
     
     /// Discard changes and revert to saved settings
@@ -87,6 +86,8 @@ class SettingsViewModel: ObservableObject {
     func updateCRF(_ newCRF: Int) {
         let clampedCRF = max(settings.codec.recommendedCRFRange.lowerBound, 
                             min(settings.codec.recommendedCRFRange.upperBound, newCRF))
+        settings.qualityPreset = .custom
+        settings.rateControlMode = .crf
         settings.crf = clampedCRF
     }
     
@@ -103,11 +104,30 @@ class SettingsViewModel: ObservableObject {
     func updateCodec(_ newCodec: VideoCodec) {
         settings.codec = newCodec
         
-        // Adjust CRF if the current value is outside the new codec's range
-        let newRange = newCodec.recommendedCRFRange
-        if !newRange.contains(settings.crf) {
-            // Use the codec's default CRF if current value is out of range
-            settings.crf = newCodec.defaultCRF
+        if settings.qualityPreset == .custom {
+            let newRange = newCodec.recommendedCRFRange
+            if !newRange.contains(settings.crf) {
+                settings.crf = newCodec.defaultCRF
+            }
+        } else {
+            settings.crf = settings.qualityPreset.recommendedCRF(for: newCodec)
+        }
+    }
+    
+    /// Update quality preset and sync CRF
+    func updateQualityPreset(_ newPreset: QualityPreset) {
+        settings.qualityPreset = newPreset
+        settings.rateControlMode = .crf
+        if newPreset != .custom {
+            settings.crf = newPreset.recommendedCRF(for: settings.codec)
+        }
+    }
+    
+    /// Update rate control mode
+    func updateRateControlMode(_ newMode: RateControlMode) {
+        settings.rateControlMode = newMode
+        if newMode != .crf {
+            settings.qualityPreset = .custom
         }
     }
     
@@ -135,16 +155,28 @@ class SettingsViewModel: ObservableObject {
     var crfDescription: String {
         switch settings.crf {
         case 18...20:
-            return "Очень высокое качество (большой размер)"
+            return NSLocalizedString("Отличное качество, большой размер", comment: "")
         case 21...23:
-            return "Высокое качество (рекомендуется)"
+            return NSLocalizedString("Хорошее качество, средний размер", comment: "")
         case 24...26:
-            return "Среднее качество (баланс размера и качества)"
+            return NSLocalizedString("Среднее качество, малый размер", comment: "")
         case 27...28:
-            return "Низкое качество (маленький размер)"
+            return NSLocalizedString("Низкое качество, очень малый размер", comment: "")
         default:
-            return "Пользовательское значение"
+            return NSLocalizedString("Пользовательское качество", comment: "")
         }
+    }
+    
+    var qualityPresetDescription: String {
+        return settings.qualityPreset.description
+    }
+    
+    var rateControlDescription: String {
+        return settings.rateControlMode.description
+    }
+    
+    var isCRFMode: Bool {
+        return settings.rateControlMode == .crf
     }
     
     /// Get codec description text
@@ -154,8 +186,18 @@ class SettingsViewModel: ObservableObject {
     
     /// Get estimated compression ratio text
     var estimatedCompressionText: String {
-        let ratio = estimatedCompressionRatio
-        return String(format: "~%.0f%% сжатие", ratio * 100)
+        switch settings.rateControlMode {
+        case .crf:
+            let ratio = estimatedCompressionRatio
+            let format = NSLocalizedString("Ориентировочное сжатие: ~%d%%", comment: "")
+            return String(format: format, Int(ratio * 100))
+        case .targetBitrate:
+            let format = NSLocalizedString("Целевой битрейт: %d kbps", comment: "")
+            return String(format: format, settings.targetBitrateKbps)
+        case .targetSize:
+            let format = NSLocalizedString("Целевой размер: %d MB", comment: "")
+            return String(format: format, settings.targetSizeMB)
+        }
     }
     
     /// Calculate estimated compression ratio based on current settings
@@ -190,8 +232,21 @@ class SettingsViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
+
+    // MARK: - Restart Logic
     
-    private var cancellables = Set<AnyCancellable>()
+    /// Relaunches the application
+    func restartApp() {
+        let url = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
+    }
 }
 
 // MARK: - SettingsViewModel Extensions

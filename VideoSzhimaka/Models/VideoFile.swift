@@ -3,7 +3,7 @@ import Foundation
 /// Represents a video file in the compression queue
 struct VideoFile: Identifiable, Codable {
     /// Unique identifier for the video file
-    let id = UUID()
+    let id: UUID
 
     /// Original URL path to the video file (used for reprocessing/deletion)
     let originalURL: URL
@@ -28,19 +28,31 @@ struct VideoFile: Identifiable, Codable {
     
     /// Current status of the compression process
     var status: CompressionStatus = .pending
+
+    /// Optional per-file compression settings override (used by folder monitoring presets)
+    var customCompressionSettings: CompressionSettings?
     
     /// Custom coding keys to handle UUID serialization
     private enum CodingKeys: String, CodingKey {
-        case url, name, duration, originalSize, compressedSize, compressionProgress, status, originalURL
+        case id, url, name, duration, originalSize, compressedSize, compressionProgress, status, originalURL, customCompressionSettings
     }
     
     /// Initialize a new VideoFile
-    init(url: URL, name: String, duration: TimeInterval, originalSize: Int64) {
+    init(
+        url: URL,
+        name: String,
+        duration: TimeInterval,
+        originalSize: Int64,
+        id: UUID = UUID(),
+        customCompressionSettings: CompressionSettings? = nil
+    ) {
+        self.id = id
         self.originalURL = url
         self.url = url
         self.name = name
         self.duration = duration
         self.originalSize = originalSize
+        self.customCompressionSettings = customCompressionSettings
     }
 }
 
@@ -51,6 +63,7 @@ extension VideoFile {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let decodedURL = try container.decode(URL.self, forKey: .url)
 
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         self.url = decodedURL
         self.originalURL = try container.decodeIfPresent(URL.self, forKey: .originalURL) ?? decodedURL
         self.name = try container.decode(String.self, forKey: .name)
@@ -59,10 +72,12 @@ extension VideoFile {
         self.compressedSize = try container.decodeIfPresent(Int64.self, forKey: .compressedSize)
         self.compressionProgress = try container.decodeIfPresent(Double.self, forKey: .compressionProgress) ?? 0.0
         self.status = try container.decodeIfPresent(CompressionStatus.self, forKey: .status) ?? .pending
+        self.customCompressionSettings = try container.decodeIfPresent(CompressionSettings.self, forKey: .customCompressionSettings)
     }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
         try container.encode(url, forKey: .url)
         try container.encode(originalURL, forKey: .originalURL)
         try container.encode(name, forKey: .name)
@@ -71,6 +86,7 @@ extension VideoFile {
         try container.encodeIfPresent(compressedSize, forKey: .compressedSize)
         try container.encode(compressionProgress, forKey: .compressionProgress)
         try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(customCompressionSettings, forKey: .customCompressionSettings)
     }
 }
 
@@ -86,13 +102,13 @@ extension VideoFile {
     
     /// Formatted original file size string
     var formattedOriginalSize: String {
-        return ByteCountFormatter.string(fromByteCount: originalSize, countStyle: .file)
+        return originalSize.formattedFileSize
     }
     
     /// Formatted compressed file size string
     var formattedCompressedSize: String {
         guard let compressedSize = compressedSize else { return "—" }
-        return ByteCountFormatter.string(fromByteCount: compressedSize, countStyle: .file)
+        return compressedSize.formattedFileSize
     }
     
     /// Compression ratio as percentage (nil if not yet compressed)

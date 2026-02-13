@@ -16,7 +16,7 @@ struct ErrorAlertModifier: ViewModifier {
                         }
                     }
                     
-                    Button("OK") {
+                    Button(NSLocalizedString("OK", comment: "")) {
                         self.error = nil
                     }
                 }
@@ -165,7 +165,7 @@ struct ErrorAlertView_Previews: PreviewProvider {
         Group {
             // Single error preview
             ErrorView(
-                error: .compressionFailed("Недостаточно памяти"),
+                error: .compressionFailed(NSLocalizedString("Недостаточно памяти", comment: "")),
                 onRetry: {},
                 onDismiss: {}
             )
@@ -176,7 +176,7 @@ struct ErrorAlertView_Previews: PreviewProvider {
                 errors: [
                     .fileNotFound("video1.mp4"),
                     .insufficientSpace,
-                    .compressionFailed("Неподдерживаемый кодек")
+                    .compressionFailed(NSLocalizedString("Неподдерживаемый кодек", comment: ""))
                 ],
                 onRetryAll: {},
                 onDismiss: {}

@@ -7,11 +7,29 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
     private var ffmpegPath: String
     private var currentProcess: Process?
     private var currentProgressTask: Task<Void, Never>?
+    private let stateLock = NSLock()
     private let processQueue = DispatchQueue(label: "ffmpeg.processing", qos: .userInitiated)
     
     // Кэш для метаданных видео (ключ: путь к файлу + размер + дата модификации)
     private var metadataCache: [String: VideoInfo] = [:]
     private let cacheQueue = DispatchQueue(label: "ffmpeg.cache", attributes: .concurrent)
+    
+    // Кэш доступности кодировщиков, чтобы не вызывать "ffmpeg -encoders" каждый раз
+    private var encoderAvailabilityCache: [String: Bool] = [:]
+    private let encoderCacheQueue = DispatchQueue(label: "ffmpeg.encoder.cache", attributes: .concurrent)
+
+    private final class ContinuationGuard {
+        private let lock = NSLock()
+        private var resumed = false
+
+        func resumeOnce(_ block: () -> Void) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !resumed else { return }
+            resumed = true
+            block()
+        }
+    }
     
     init() throws {
         // Инициализируем ffmpegPath пустой строкой, установим правильное значение ниже
@@ -41,9 +59,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         
         guard let validPath = ffmpegBinaryPath else {
             logger.error("FFmpeg binary not found in bundle at any of these paths: \(possiblePaths)")
-            // Fallback к системному FFmpeg
-            try initializeWithSystemFFmpeg()
-            return
+            throw VideoCompressionError.ffmpegNotFound
         }
         
         // Тестируем, что найденный бинарник может быть запущен
@@ -52,33 +68,37 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             logger.info("FFmpeg service initialized with bundled binary: \(validPath)")
             return
         } else {
-            logger.warning("Bundled FFmpeg binary failed to run, trying system FFmpeg")
-            try initializeWithSystemFFmpeg()
+            logger.error("Bundled FFmpeg binary failed to run: \(validPath)")
+            throw VideoCompressionError.ffmpegNotFound
         }
     }
+
+    private func withStateLock<T>(_ block: () -> T) -> T {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return block()
+    }
     
-    private func initializeWithSystemFFmpeg() throws {
-        let systemPaths = [
-            "/opt/homebrew/bin/ffmpeg",  // Homebrew on Apple Silicon
-            "/usr/local/bin/ffmpeg",     // Homebrew on Intel
-            "/usr/bin/ffmpeg"            // System FFmpeg
-        ]
-        
-        for systemPath in systemPaths {
-            if FileManager.default.fileExists(atPath: systemPath) {
-                if try testFFmpegBinary(at: systemPath) {
-                    self.ffmpegPath = systemPath
-                    logger.info("FFmpeg service initialized with system binary: \(systemPath)")
-                    return
-                }
-            }
-        }
-        
-        logger.error("No working FFmpeg binary found")
-        throw VideoCompressionError.ffmpegNotFound
+    private var currentProcessSafe: Process? {
+        get { withStateLock { currentProcess } }
+        set { withStateLock { currentProcess = newValue } }
+    }
+    
+    private var currentProgressTaskSafe: Task<Void, Never>? {
+        get { withStateLock { currentProgressTask } }
+        set { withStateLock { currentProgressTask = newValue } }
     }
     
     private func testFFmpegBinary(at path: String) throws -> Bool {
+        if Thread.isMainThread {
+            return try DispatchQueue.global(qos: .utility).sync {
+                try testFFmpegBinaryOnCurrentThread(at: path)
+            }
+        }
+        return try testFFmpegBinaryOnCurrentThread(at: path)
+    }
+    
+    private func testFFmpegBinaryOnCurrentThread(at path: String) throws -> Bool {
         let testProcess = Process()
         testProcess.executableURL = URL(fileURLWithPath: path)
         testProcess.arguments = ["-version"]
@@ -97,6 +117,10 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
     
     /// Проверяем, доступен ли указанный видеокодировщик в установленном FFmpeg
     private func isEncoderAvailable(_ encoderName: String) -> Bool {
+        if let cached = encoderCacheQueue.sync(execute: { encoderAvailabilityCache[encoderName] }) {
+            return cached
+        }
+        
         let process = Process()
         process.executableURL = URL(fileURLWithPath: ffmpegPath)
         process.arguments = ["-hide_banner", "-encoders"]
@@ -108,7 +132,11 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             process.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             guard let output = String(data: data, encoding: .utf8) else { return false }
-            return output.contains(encoderName)
+            let available = output.contains(encoderName)
+            encoderCacheQueue.async(flags: .barrier) {
+                self.encoderAvailabilityCache[encoderName] = available
+            }
+            return available
         } catch {
             logger.warning("Failed to query encoders: \(error)")
             return false
@@ -125,40 +153,35 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         // Проверяем кэш
         let cacheKey = try generateCacheKey(for: url)
         
+        if let cachedInfo = cacheQueue.sync(execute: { metadataCache[cacheKey] }) {
+            logger.info("Using cached metadata for: \(url.path)")
+            return cachedInfo
+        }
+        
         return try await withCheckedThrowingContinuation { continuation in
-            cacheQueue.async(flags: .barrier) { [weak self] in
+            processQueue.async { [weak self] in
                 guard let self = self else {
                     continuation.resume(throwing: VideoCompressionError.unknownError("Service deallocated"))
                     return
                 }
-
-                // Проверяем кэш
-                if let cachedInfo = self.metadataCache[cacheKey] {
-                    self.logger.info("Using cached metadata for: \(url.path)")
-                    continuation.resume(returning: cachedInfo)
-                    return
-                }
-
-                // Извлекаем метаданные в фоновой очереди только если не нашли в кэше
-                self.processQueue.async {
-                    do {
-                        let videoInfo = try self.extractVideoMetadata(from: url)
-
-                        // Сохраняем в кэш
-                        self.cacheQueue.async(flags: .barrier) {
-                            self.metadataCache[cacheKey] = videoInfo
-
-                            // Ограничиваем размер кэша (максимум 100 файлов)
-                            if self.metadataCache.count > 100 {
-                                let oldestKey = self.metadataCache.keys.first!
-                                self.metadataCache.removeValue(forKey: oldestKey)
-                            }
+                
+                do {
+                    let videoInfo = try self.extractVideoMetadata(from: url)
+                    
+                    // Сохраняем в кэш
+                    self.cacheQueue.async(flags: .barrier) {
+                        self.metadataCache[cacheKey] = videoInfo
+                        
+                        // Ограничиваем размер кэша (максимум 100 файлов)
+                        if self.metadataCache.count > 100 {
+                            let oldestKey = self.metadataCache.keys.first!
+                            self.metadataCache.removeValue(forKey: oldestKey)
                         }
-
-                        continuation.resume(returning: videoInfo)
-                    } catch {
-                        continuation.resume(throwing: error)
                     }
+                    
+                    continuation.resume(returning: videoInfo)
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
         }
@@ -201,12 +224,12 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             guard let self = self else { return }
             
             // Сохраняем ссылки перед очисткой
-            let processToTerminate = self.currentProcess
-            let progressTaskToCancel = self.currentProgressTask
+            let processToTerminate = self.currentProcessSafe
+            let progressTaskToCancel = self.currentProgressTaskSafe
             
             // Сразу очищаем состояние, чтобы сигнализировать об отмене
-            self.currentProcess = nil
-            self.currentProgressTask = nil
+            self.currentProcessSafe = nil
+            self.currentProgressTaskSafe = nil
             
             // Отменяем задачу мониторинга прогресса
             progressTaskToCancel?.cancel()
@@ -588,35 +611,77 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         // Формируем аргументы для FFmpeg с поддержкой VideoToolbox
         var arguments = ["-i", input.path]
         
+        let targetVideoBitrateKbps = settings.targetVideoBitrateKbps(duration: totalDuration, hasAudio: videoInfo.hasAudio)
+        
         // Попытка аппаратного кодирования (если включено в настройках)
         if settings.useHardwareAcceleration, let hwEncoder = settings.codec.hardwareEncoder {
             if isEncoderAvailable(hwEncoder) {
                 arguments.append(contentsOf: [
-                    "-c:v", hwEncoder,
-                    "-q:v", String(settings.crf)
+                    "-c:v", hwEncoder
                 ])
+                
+                if settings.rateControlMode == .crf {
+                    arguments.append(contentsOf: ["-q:v", String(settings.videoToolboxQualityValue)])
+                } else if let bitrateKbps = targetVideoBitrateKbps {
+                    arguments.append(contentsOf: [
+                        "-b:v", "\(bitrateKbps)k",
+                        "-maxrate", "\(bitrateKbps)k",
+                        "-bufsize", "\(bitrateKbps * 2)k"
+                    ])
+                }
+                
                 logger.info("Using hardware acceleration with \(hwEncoder)")
             } else {
                 // Fallback к программному кодированию, если аппаратный кодировщик недоступен
                 arguments.append(contentsOf: [
-                    "-c:v", settings.codec.ffmpegValue,
-                    "-crf", String(settings.crf),
-                    "-preset", "medium"
+                    "-c:v", settings.codec.ffmpegValue
                 ])
+                
+                if settings.rateControlMode == .crf {
+                    arguments.append(contentsOf: [
+                        "-crf", String(settings.crf),
+                        "-preset", settings.encodingSpeed.ffmpegValue
+                    ])
+                } else if let bitrateKbps = targetVideoBitrateKbps {
+                    arguments.append(contentsOf: [
+                        "-b:v", "\(bitrateKbps)k",
+                        "-maxrate", "\(bitrateKbps)k",
+                        "-bufsize", "\(bitrateKbps * 2)k",
+                        "-preset", settings.encodingSpeed.ffmpegValue
+                    ])
+                }
+                
                 logger.warning("Hardware encoder \(hwEncoder) not available. Falling back to software \(settings.codec.ffmpegValue)")
             }
         } else {
             // Программное кодирование
             arguments.append(contentsOf: [
-                "-c:v", settings.codec.ffmpegValue,
-                "-crf", String(settings.crf),
-                "-preset", "medium"
+                "-c:v", settings.codec.ffmpegValue
             ])
+            
+            if settings.rateControlMode == .crf {
+                arguments.append(contentsOf: [
+                    "-crf", String(settings.crf),
+                    "-preset", settings.encodingSpeed.ffmpegValue
+                ])
+            } else if let bitrateKbps = targetVideoBitrateKbps {
+                arguments.append(contentsOf: [
+                    "-b:v", "\(bitrateKbps)k",
+                    "-maxrate", "\(bitrateKbps)k",
+                    "-bufsize", "\(bitrateKbps * 2)k",
+                    "-preset", settings.encodingSpeed.ffmpegValue
+                ])
+            }
+            
             logger.info("Using software encoding with \(settings.codec.ffmpegValue)")
         }
         
         // Настройки аудио
         arguments.append(contentsOf: settings.audioCodecParameters)
+        
+        if let scaleFilter = settings.scaleFilter {
+            arguments.append(contentsOf: ["-vf", scaleFilter])
+        }
         
         // Добавляем параметры для более частого обновления прогресса и ограничиваем время на входной анализ
         arguments.append(contentsOf: [
@@ -636,20 +701,16 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         process.standardOutput = Pipe()
         
         // Сохраняем ссылку на процесс для возможности отмены
-        currentProcess = process
+        currentProcessSafe = process
 
         // Ожидание завершения процесса с установкой terminationHandler ДО запуска
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                var continuationResumed = false
-                let continuationLock = NSLock()
+                let guardState = ContinuationGuard()
 
                 // Безопасная функция для завершения continuation
                 let safeContinuation: @Sendable (Result<Void, Error>) -> Void = { result in
-                    continuationLock.lock()
-                    defer { continuationLock.unlock() }
-                    if !continuationResumed {
-                        continuationResumed = true
+                    guardState.resumeOnce {
                         continuation.resume(with: result)
                     }
                 }
@@ -662,7 +723,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                     self.logger.info("FFmpeg process terminated with status: \(exitCode), reason: \(String(describing: reason))")
 
                     // Проверяем, была ли операция отменена
-                    if self.currentProcess == nil {
+                    if self.currentProcessSafe == nil {
                         self.logger.info("Process was cancelled by user")
                         safeContinuation(.failure(VideoCompressionError.cancelled))
                         return
@@ -695,7 +756,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                 Task {
                     while process.isRunning {
                         try? await Task.sleep(nanoseconds: 200_000_000)
-                        if currentProcess == nil {
+                        if currentProcessSafe == nil {
                             logger.info("Process cancellation detected, terminating FFmpeg")
                             if process.isRunning {
                                 process.terminate()
@@ -714,7 +775,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                     try process.run()
 
                     // Проверяем, что процесс не был отменен сразу после запуска
-                    if currentProcess == nil {
+                    if currentProcessSafe == nil {
                         logger.info("Process was cancelled immediately after start")
                         if process.isRunning { process.terminate() }
                         safeContinuation(.failure(VideoCompressionError.cancelled))
@@ -730,7 +791,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
                             processReference: process
                         )
                     }
-                    currentProgressTask = progressTask
+                    currentProgressTaskSafe = progressTask
 
                 } catch {
                     // Не удалось запустить процесс
@@ -744,24 +805,24 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             process.terminationHandler = nil
 
             // Финальная проверка отмены
-            guard currentProcess != nil else {
+            guard currentProcessSafe != nil else {
                 logger.info("Process was cancelled after completion")
                 throw VideoCompressionError.cancelled
             }
 
         } catch let error as VideoCompressionError {
-            currentProcess = nil
-            currentProgressTask = nil
+            currentProcessSafe = nil
+            currentProgressTaskSafe = nil
             throw error
         } catch {
-            currentProcess = nil
-            currentProgressTask = nil
+            currentProcessSafe = nil
+            currentProgressTaskSafe = nil
             logger.error("Process execution failed: \(error)")
             throw VideoCompressionError.compressionFailed("Process execution failed: \(error.localizedDescription)")
         }
         
-        currentProcess = nil
-        currentProgressTask = nil
+        currentProcessSafe = nil
+        currentProgressTaskSafe = nil
         
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
@@ -795,20 +856,14 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         // Мониторим процесс с использованием локальной ссылки
         while isMonitoringActive && processReference.isRunning {
             // Проверяем глобальное состояние отмены
-            if currentProcess == nil {
+            if currentProcessSafe == nil {
                 logger.info("Progress monitoring stopped - global cancellation detected")
                 isMonitoringActive = false
                 break
             }
             
             // Читаем доступные данные с обработкой ошибок
-            let data: Data
-            do {
-                data = fileHandle.availableData
-            } catch {
-                logger.warning("Failed to read progress data: \(error)")
-                break
-            }
+            let data = fileHandle.availableData
             
             if data.isEmpty {
                 // Используем async sleep вместо usleep
@@ -828,18 +883,18 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
             }
             buffer += newOutput
             
-            // Обрабатываем построчно для лучшего парсинга
-            let lines = buffer.components(separatedBy: .newlines)
-            buffer = lines.last ?? "" // Сохраняем последнюю неполную строку
-            
-            for line in lines.dropLast() {
+            // Обрабатываем построчно для лучшего парсинга (без components)
+            while let newlineIndex = buffer.firstIndex(of: "\n") {
+                let line = String(buffer[..<newlineIndex])
+                buffer.removeSubrange(...newlineIndex)
+                
                 if let progress = parseProgressFromLine(line, totalDuration: totalDuration, regex: timeRegex) {
                     // Обновляем прогресс только если изменение значительное (больше 0.5%)
                     if abs(progress - lastProgress) > 0.005 {
                         lastProgress = progress
                         
                         // Проверяем состояние отмены перед обновлением UI
-                        if currentProcess != nil {
+                        if currentProcessSafe != nil {
                             DispatchQueue.main.async {
                                 progressHandler(progress)
                             }
@@ -855,7 +910,7 @@ class FFmpegService: FFmpegServiceProtocol, @unchecked Sendable {
         
         // Безопасная финальная проверка прогресса
         // Проверяем только если мониторинг завершился естественным образом
-        if isMonitoringActive && currentProcess != nil && !processReference.isRunning {
+        if isMonitoringActive && currentProcessSafe != nil && !processReference.isRunning {
             let terminationStatus = processReference.terminationStatus
             if terminationStatus == 0 && lastProgress < 1.0 {
                 logger.info("Setting final progress to 100% (process completed successfully)")

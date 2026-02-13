@@ -129,6 +129,17 @@ final class SettingsServiceTests: XCTestCase {
         XCTAssertEqual(savedSettings.codec, .h265)
         XCTAssertTrue(savedSettings.deleteOriginals)
     }
+
+    func testSaveSettingsPerformance() {
+        settingsService.settings.crf = 23
+
+        measure {
+            for i in 0..<500 {
+                settingsService.settings.crf = 18 + (i % 10)
+                settingsService.saveSettings()
+            }
+        }
+    }
     
     func testResetToDefaults() {
         // Given modified settings

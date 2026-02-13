@@ -1,7 +1,7 @@
 import Foundation
 
 /// Enum representing various errors that can occur during video compression
-enum VideoCompressionError: LocalizedError {
+enum VideoCompressionError: LocalizedError, Codable, Equatable {
     case ffmpegNotFound
     case unsupportedFormat(String)
     case compressionFailed(String)

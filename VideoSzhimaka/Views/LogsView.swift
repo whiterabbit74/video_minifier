@@ -7,20 +7,9 @@ struct LogsView: View {
     @State private var searchText = ""
     @State private var showingExportSheet = false
     @State private var exportedLogs = ""
+    @State private var filteredLogs: [LogEntry] = []
     @Environment(\.dismiss) private var dismiss
-    
-    private var filteredLogs: [LogEntry] {
-        var logs = loggingService.filteredLogs(by: selectedLevel)
-        
-        if !searchText.isEmpty {
-            logs = logs.filter { entry in
-                entry.message.localizedCaseInsensitiveContains(searchText) ||
-                entry.category.localizedCaseInsensitiveContains(searchText)
-            }
-        }
-        
-        return logs.reversed() // Показываем новые логи сверху
-    }
+    private let filterQueue = DispatchQueue(label: "logs.filter.queue", qos: .userInitiated)
     
     var body: some View {
         VStack(spacing: 0) {
@@ -44,6 +33,7 @@ struct LogsView: View {
                         .foregroundColor(.secondary)
                     TextField(NSLocalizedString("Поиск в логах...", comment: ""), text: $searchText)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .accessibilityLabel(NSLocalizedString("Поиск в логах", comment: ""))
                 }
                 .frame(width: 200)
                 
@@ -67,14 +57,15 @@ struct LogsView: View {
                         dismiss()
                     }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.body.weight(.medium))
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .frame(width: 24, height: 24)
+                    .frame(width: 28, height: 28)
                     .background(Color.secondary.opacity(0.1))
-                    .cornerRadius(12)
-                    .help("Закрыть окно логов")
+                    .cornerRadius(8)
+                    .accessibilityLabel(NSLocalizedString("Закрыть окно логов", comment: ""))
+                    .help(NSLocalizedString("Закрыть окно логов", comment: ""))
                 }
             }
             .padding()
@@ -107,10 +98,42 @@ struct LogsView: View {
                 .listStyle(PlainListStyle())
             }
         }
-        .frame(minWidth: 800, minHeight: 500)
-        .navigationTitle(NSLocalizedString("Логи приложения", comment: ""))
+        .frame(minWidth: 900, minHeight: 600)
         .sheet(isPresented: $showingExportSheet) {
             LogExportView(logs: exportedLogs)
+        }
+        .onAppear(perform: refreshFilteredLogs)
+        .onReceive(loggingService.$logs) { _ in
+            refreshFilteredLogs()
+        }
+        .onChange(of: selectedLevel) { _ in
+            refreshFilteredLogs()
+        }
+        .onChange(of: searchText) { _ in
+            refreshFilteredLogs()
+        }
+    }
+    
+    private func refreshFilteredLogs() {
+        let level = selectedLevel
+        let query = searchText
+        let logsSnapshot = loggingService.logs
+        let queryLowercased = query.lowercased()
+        
+        filterQueue.async {
+            var logs = level == nil ? logsSnapshot : logsSnapshot.filter { $0.level == level }
+            
+            if !queryLowercased.isEmpty {
+                logs = logs.filter { entry in
+                    entry.message.lowercased().contains(queryLowercased) ||
+                    entry.category.lowercased().contains(queryLowercased)
+                }
+            }
+            
+            let result = Array(logs.reversed())
+            DispatchQueue.main.async {
+                self.filteredLogs = result
+            }
         }
     }
 }
@@ -264,11 +287,13 @@ struct LogDocument: FileDocument {
     }
 }
 
+#if DEBUG
 #Preview {
     let loggingService = LoggingService()
-    loggingService.info("Тестовое информационное сообщение", category: "Test")
-    loggingService.warning("Тестовое предупреждение", category: "Test")
-    loggingService.error("Тестовая ошибка", category: "Test")
+    loggingService.info(NSLocalizedString("Тестовое информационное сообщение", comment: ""), category: "Test")
+    loggingService.warning(NSLocalizedString("Тестовое предупреждение", comment: ""), category: "Test")
+    loggingService.error(NSLocalizedString("Тестовая ошибка", comment: ""), category: "Test")
     
     return LogsView(loggingService: loggingService)
 }
+#endif

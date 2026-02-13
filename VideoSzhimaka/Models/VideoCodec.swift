@@ -12,9 +12,9 @@ enum VideoCodec: String, CaseIterable, Codable {
     var displayName: String {
         switch self {
         case .h264:
-            return "H.264 (рекомендуется)"
+            return NSLocalizedString("H.264 (рекомендуется)", comment: "")
         case .h265:
-            return "H.265 (эффективнее)"
+            return NSLocalizedString("H.265 (эффективнее)", comment: "")
         }
     }
     
@@ -22,9 +22,9 @@ enum VideoCodec: String, CaseIterable, Codable {
     var detailedDescription: String {
         switch self {
         case .h264:
-            return "Лучшая совместимость, быстрое кодирование. Поддерживается всеми устройствами и плеерами."
+            return NSLocalizedString("Лучшая совместимость, быстрое кодирование. Поддерживается всеми устройствами и плеерами.", comment: "")
         case .h265:
-            return "Лучшее сжатие, медленнее кодирование. Поддерживается не на всех устройствах - проверьте совместимость перед использованием."
+            return NSLocalizedString("Лучшее сжатие, медленнее кодирование. Поддерживается не на всех устройствах - проверьте совместимость перед использованием.", comment: "")
         }
     }
     

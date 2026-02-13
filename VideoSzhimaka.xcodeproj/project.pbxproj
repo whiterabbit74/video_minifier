@@ -50,6 +50,9 @@
 		A1000125 /* CrashRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000119 /* CrashRecoveryTests.swift */; };
 		A1000126 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000127 /* AboutView.swift */; };
 		A1000129 /* FFmpeg_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = A1000128 /* FFmpeg_LICENSE.txt */; };
+		A1000131 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000130 /* SidebarView.swift */; };
+		A1000134 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000132 /* StatisticsView.swift */; };
+		A1000135 /* SimpleSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000133 /* SimpleSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +113,9 @@
 		A1000119 /* CrashRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashRecoveryTests.swift; sourceTree = "<group>"; };
 		A1000127 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		A1000128 /* FFmpeg_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FFmpeg_LICENSE.txt; sourceTree = "<group>"; };
+		A1000130 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		A1000132 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
+		A1000133 /* SimpleSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +188,9 @@
 			isa = PBXGroup;
 			children = (
 				A1000004 /* ContentView.swift */,
+				A1000130 /* SidebarView.swift */,
+				A1000132 /* StatisticsView.swift */,
+				A1000133 /* SimpleSettingsView.swift */,
 				A1000084 /* FileRowView.swift */,
 				A1000089 /* SettingsView.swift */,
 				A1000099 /* LogsView.swift */,
@@ -285,11 +294,12 @@
 		A1000021 /* VideoSzhimaka */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A1000022 /* Build configuration list for PBXNativeTarget "VideoSzhimaka" */;
-			buildPhases = (
-				A1000023 /* Sources */,
-				A1000021F /* Frameworks */,
-				A1000024 /* Resources */,
-			);
+				buildPhases = (
+					A1000023 /* Sources */,
+					A1000021F /* Frameworks */,
+					A1000024 /* Resources */,
+					A1000136 /* Copy Localizations */,
+				);
 			buildRules = (
 			);
 			dependencies = (
@@ -340,10 +350,19 @@
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-				Base,
-			);
+				knownRegions = (
+					en,
+					Base,
+					ru,
+					de,
+					es,
+					fr,
+					it,
+					ja,
+					ko,
+					"pt-BR",
+					"zh-Hans",
+				);
 			mainGroup = A1000012;
 			productRefGroup = A1000014 /* Products */;
 			projectDirPath = "";
@@ -376,6 +395,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		A1000136 /* Copy Localizations */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Localizations";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+				shellScript = "\"${SRCROOT}/Scripts/copy_resources.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A1000023 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -404,6 +444,9 @@
 				A1000106 /* ErrorAlertView.swift in Sources */,
 				A1000108 /* PerformanceMonitorService.swift in Sources */,
 				A1000126 /* AboutView.swift in Sources */,
+				A1000131 /* SidebarView.swift in Sources */,
+				A1000134 /* StatisticsView.swift in Sources */,
+				A1000135 /* SimpleSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -568,9 +611,10 @@
 				CODE_SIGN_ENTITLEMENTS = VideoSzhimaka/VideoSzhimaka.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+					CURRENT_PROJECT_VERSION = 2;
+					DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
+					ENABLE_USER_SCRIPT_SANDBOXING = NO;
+					ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VideoSzhimaka/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -597,9 +641,10 @@
 				CODE_SIGN_ENTITLEMENTS = VideoSzhimaka/VideoSzhimaka.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
-				DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
-				ENABLE_PREVIEWS = YES;
+					CURRENT_PROJECT_VERSION = 2;
+					DEVELOPMENT_ASSET_PATHS = "\"VideoSzhimaka/Preview Content\"";
+					ENABLE_USER_SCRIPT_SANDBOXING = NO;
+					ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VideoSzhimaka/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

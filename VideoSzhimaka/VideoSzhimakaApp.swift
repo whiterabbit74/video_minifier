@@ -13,6 +13,7 @@ struct VideoSzhimakaApp: App {
             ContentView()
                 .environmentObject(settingsService)
                 .onAppear {
+                    appDelegate.settingsService = settingsService
                     checkArchitectureCompatibility()
                     setupWindow()
                     configureAppBehavior()
@@ -25,7 +26,7 @@ struct VideoSzhimakaApp: App {
                         NSApp.terminate(nil)
                     }
                 } message: {
-                    Text("Это приложение оптимизировано для процессоров Apple Silicon (M1/M2/M3) и не может работать на Intel Mac. Пожалуйста, используйте Mac с процессором Apple Silicon.")
+                    Text(NSLocalizedString("Это приложение оптимизировано для процессоров Apple Silicon (M1/M2/M3) и не может работать на Intel Mac. Пожалуйста, используйте Mac с процессором Apple Silicon.", comment: ""))
                 }
         }
     }
@@ -47,8 +48,10 @@ struct VideoSzhimakaApp: App {
                 
                 // Set window properties
                 window.title = NSLocalizedString("Видео-Сжимака", comment: "")
-                window.titlebarAppearsTransparent = false
+                window.titlebarAppearsTransparent = true
                 window.titleVisibility = .visible
+                window.setFrameAutosaveName("MainWindow")
+                window.toolbarStyle = .unified
                 
                 // Restore window frame if available
                 if let savedFrame = settingsService.loadWindowFrame() {
@@ -59,8 +62,8 @@ struct VideoSzhimakaApp: App {
                     window.setFrame(defaultFrame, display: true)
                 }
                 
-                // Set minimum size
-                window.minSize = NSSize(width: 700, height: 500)
+                // Sidebar has fixed width, so keep a larger minimum width.
+                window.minSize = NSSize(width: 980, height: 620)
                 
                 // Save window frame when it changes
                 NotificationCenter.default.addObserver(
@@ -78,6 +81,7 @@ struct VideoSzhimakaApp: App {
                 ) { _ in
                     settingsService.saveWindowFrame(window.frame)
                 }
+                
             }
         }
     }
@@ -105,37 +109,41 @@ struct VideoSzhimakaApp: App {
     }
     
     private func setupMenuBarItem() {
+        guard let delegate = AppDelegate.shared else { return }
         // Create status bar item if it doesn't exist
-        if AppDelegate.shared.statusItem == nil {
+        if delegate.statusItem == nil {
             let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             statusItem.button?.title = "🎬"
             statusItem.button?.toolTip = NSLocalizedString("Видео-Сжимака", comment: "")
             
             let menu = NSMenu()
             let itemShow = NSMenuItem(title: NSLocalizedString("Показать окно", comment: ""), action: #selector(AppDelegate.showMainWindow), keyEquivalent: "")
-            itemShow.target = AppDelegate.shared
+            itemShow.target = delegate
             menu.addItem(itemShow)
             menu.addItem(NSMenuItem.separator())
             let itemSettings = NSMenuItem(title: NSLocalizedString("Настройки", comment: ""), action: #selector(AppDelegate.showSettings), keyEquivalent: ",")
-            itemSettings.target = AppDelegate.shared
+            itemSettings.target = delegate
             menu.addItem(itemSettings)
+            let itemLogs = NSMenuItem(title: NSLocalizedString("menu.logs", comment: "Menu item title for logs"), action: #selector(AppDelegate.showLogs), keyEquivalent: "l")
+            itemLogs.target = delegate
+            menu.addItem(itemLogs)
             let itemAbout = NSMenuItem(title: NSLocalizedString("О программе", comment: ""), action: #selector(AppDelegate.showAbout), keyEquivalent: "")
-            itemAbout.target = AppDelegate.shared
+            itemAbout.target = delegate
             menu.addItem(itemAbout)
             menu.addItem(NSMenuItem.separator())
             let itemQuit = NSMenuItem(title: NSLocalizedString("Выйти", comment: ""), action: #selector(AppDelegate.quit), keyEquivalent: "q")
-            itemQuit.target = AppDelegate.shared
+            itemQuit.target = delegate
             menu.addItem(itemQuit)
             
             statusItem.menu = menu
-            AppDelegate.shared.statusItem = statusItem
+            delegate.statusItem = statusItem
         }
     }
     
     private func removeMenuBarItem() {
-        if let statusItem = AppDelegate.shared.statusItem {
+        if let statusItem = AppDelegate.shared?.statusItem {
             NSStatusBar.system.removeStatusItem(statusItem)
-            AppDelegate.shared.statusItem = nil
+            AppDelegate.shared?.statusItem = nil
         }
     }
 }
@@ -143,19 +151,42 @@ struct VideoSzhimakaApp: App {
 // MARK: - AppDelegate for Menu Bar Support
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    static let shared = AppDelegate()
+    static weak var shared: AppDelegate?
     var statusItem: NSStatusItem?
+    weak var settingsService: SettingsService?
     private var aboutWindow: NSWindow?
+    private var logsWindow: NSWindow?
+    private var pendingOpenURLs: [URL] = []
+    
+    override init() {
+        super.init()
+        AppDelegate.shared = self
+    }
     
     @objc func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.windows.first?.makeKeyAndOrderFront(nil)
     }
+
+    func applyTheme(_ theme: String) {
+        switch theme {
+        case "light":
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark":
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        default:
+            NSApp.appearance = nil
+        }
+    }
     
     @objc func showSettings() {
         showMainWindow()
-        // Post notification to show settings
         NotificationCenter.default.post(name: .showSettings, object: nil)
+    }
+
+    func showSettingsWindow() {
+        // Keep API compatibility for existing callers, but route to in-app tab.
+        showSettings()
     }
     
     @objc func showAbout() {
@@ -172,6 +203,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                               defer: false)
         window.center()
         window.title = NSLocalizedString("О программе", comment: "")
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.contentView = hostingView
         window.isReleasedWhenClosed = false
         window.standardWindowButton(.zoomButton)?.isHidden = true
@@ -184,9 +218,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.aboutWindow = nil
         }
     }
+
+    @objc func showLogs() {
+        showLogsWindow()
+    }
+    
+    func showLogsWindow() {
+        if let logsWindow = logsWindow {
+            logsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        let hostingView = NSHostingView(rootView: LogsView(loggingService: LoggingService.shared))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered,
+                              defer: false)
+        window.center()
+        window.title = NSLocalizedString("menu.logs", comment: "Logs window title")
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 900, height: 600)
+        
+        self.logsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            self?.logsWindow = nil
+        }
+    }
     
     @objc func quit() {
         NSApp.terminate(nil)
+    }
+
+    func application(_ application: NSApplication, openFile filename: String) -> Bool {
+        handleOpenFiles([URL(fileURLWithPath: filename)])
+        return true
+    }
+
+    func application(_ application: NSApplication, openFiles filenames: [String]) {
+        handleOpenFiles(filenames.map { URL(fileURLWithPath: $0) })
+        application.reply(toOpenOrPrint: .success)
+    }
+    
+    func application(_ application: NSApplication, open urls: [URL]) {
+        handleOpenFiles(urls)
+    }
+
+    func consumePendingOpenFiles() -> [URL] {
+        let urls = pendingOpenURLs
+        pendingOpenURLs.removeAll()
+        return urls
+    }
+
+    private func handleOpenFiles(_ urls: [URL]) {
+        pendingOpenURLs.append(contentsOf: urls)
+        NotificationCenter.default.post(name: .openFiles, object: nil, userInfo: ["urls": urls])
     }
 }
 
@@ -195,4 +288,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension Notification.Name {
     static let showSettings = Notification.Name("showSettings")
     static let openLogs = Notification.Name("openLogs")
+    static let openFiles = Notification.Name("openFiles")
 }

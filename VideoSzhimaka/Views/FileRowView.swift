@@ -3,6 +3,7 @@ import SwiftUI
 struct FileRowView: View {
     let file: VideoFile
     @ObservedObject var viewModel: MainViewModel
+    @State private var isHovered = false
     
     var body: some View {
         HStack(spacing: 16) {
@@ -40,8 +41,18 @@ struct FileRowView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .cardStyle()
-        .overlay(statusBorder)
+        .background(isHovered ? Color.secondary.opacity(0.1) : Color.clear)
+        .cornerRadius(6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(file.name), \(statusDescription)")
+        .contextMenu {
+            contextMenuContent
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
     }
     
     // MARK: - Status Indicator
@@ -51,13 +62,9 @@ struct FileRowView: View {
         Circle()
             .fill(statusColor)
             .frame(width: 8, height: 8)
-            .overlay(
-                Circle()
-                    .stroke(statusColor.opacity(0.3), lineWidth: 2)
-                    .scaleEffect(file.status == .compressing ? 1.5 : 1.0)
-                    .opacity(file.status == .compressing ? 0.6 : 0.0)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: file.status == .compressing)
-            )
+            .shadow(color: statusColor.opacity(0.5), radius: file.status == .compressing ? 2 : 0)
+            .help(statusDescription)
+            .accessibilityLabel(statusDescription)
     }
     
     // MARK: - File Information Row
@@ -70,12 +77,14 @@ struct FileRowView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .labelStyle(.titleAndIcon)
+                .monospacedDigit()
             
             // Original size
             Label(file.formattedOriginalSize, systemImage: "doc")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .labelStyle(.titleAndIcon)
+                .monospacedDigit()
             
             // Compressed size and ratio (if available)
             if file.compressedSize != nil {
@@ -86,6 +95,7 @@ struct FileRowView: View {
                     .font(.caption)
                     .foregroundColor(compressionColor)
                     .labelStyle(.titleAndIcon)
+                    .monospacedDigit()
                 
                 if let ratio = file.compressionRatio {
                     let ratioText = file.isCompressedLarger ? 
@@ -96,6 +106,7 @@ struct FileRowView: View {
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(compressionColor)
+                        .monospacedDigit()
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(compressionColor.opacity(0.1))
@@ -135,12 +146,12 @@ struct FileRowView: View {
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundColor(.blue)
+                    .monospacedDigit()
             }
             
             ProgressView(value: file.compressionProgress)
                 .progressViewStyle(LinearProgressViewStyle(tint: .blue))
                 .frame(height: 6)
-                .background(Color.blue.opacity(0.1))
                 .cornerRadius(3)
         }
     }
@@ -168,10 +179,6 @@ struct FileRowView: View {
                     .help(suggestion)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color(NSColor.errorColor).opacity(0.1))
-        .cornerRadius(6)
     }
     
     @ViewBuilder
@@ -190,10 +197,6 @@ struct FileRowView: View {
                 .font(.caption)
                 .foregroundColor(displayColor)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(displayColor.opacity(0.1))
-        .cornerRadius(6)
     }
     
     // MARK: - Action Buttons
@@ -212,6 +215,7 @@ struct FileRowView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .accessibilityLabel(NSLocalizedString("Открыть в Finder", comment: ""))
             .help(NSLocalizedString("Открыть в Finder", comment: ""))
             
             Button(action: {
@@ -223,8 +227,41 @@ struct FileRowView: View {
             .controlSize(.small)
             .foregroundColor(Color(NSColor.errorColor))
             .disabled(viewModel.currentlyProcessingFileId == file.id)
-            .help(NSLocalizedString("Удалить из списка", comment: ""))
+            .accessibilityLabel(NSLocalizedString("Удалить из списка", comment: ""))
+            .help(deleteHelpText)
         }
+    }
+
+    @ViewBuilder
+    private var contextMenuContent: some View {
+        switch file.status {
+        case .pending:
+            Button(NSLocalizedString("Сжать", comment: "")) {
+                viewModel.compressFile(withId: file.id)
+            }
+            .disabled(viewModel.isProcessing)
+        case .failed(let error):
+            if error.isRetryable {
+                Button(NSLocalizedString("Повторить", comment: "")) {
+                    viewModel.retryCompression(forFileId: file.id)
+                }
+            }
+        case .compressing:
+            Button(NSLocalizedString("Отменить", comment: "")) {
+                viewModel.cancelAllProcessing()
+            }
+        case .completed:
+            EmptyView()
+        }
+        
+        Button(NSLocalizedString("Открыть в Finder", comment: "")) {
+            viewModel.openFileInFinder(withId: file.id)
+        }
+        
+        Button(NSLocalizedString("Удалить из списка", comment: "")) {
+            viewModel.removeFile(withId: file.id)
+        }
+        .disabled(viewModel.currentlyProcessingFileId == file.id)
     }
     
     @ViewBuilder
@@ -237,6 +274,7 @@ struct FileRowView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .disabled(viewModel.isProcessing)
+            .help(compressHelpText)
             
         case .failed(let error):
             if error.isRetryable {
@@ -310,6 +348,21 @@ struct FileRowView: View {
             return Color(NSColor.errorColor)
         }
     }
+
+    private var statusDescription: String {
+        switch file.status {
+        case .pending:
+            return NSLocalizedString("Ожидает", comment: "")
+        case .compressing:
+            return NSLocalizedString("Сжимается", comment: "")
+        case .completed:
+            return file.isCompressedLarger
+                ? NSLocalizedString("Сжатие завершено (файл стал больше)", comment: "")
+                : NSLocalizedString("Сжатие завершено", comment: "")
+        case .failed:
+            return NSLocalizedString("Ошибка при сжатии", comment: "")
+        }
+    }
     
     @ViewBuilder
     private var statusBorder: some View {
@@ -345,8 +398,23 @@ struct FileRowView: View {
             return 0.5
         }
     }
+
+    private var deleteHelpText: String {
+        if viewModel.currentlyProcessingFileId == file.id {
+            return NSLocalizedString("Нельзя удалить файл во время сжатия", comment: "")
+        }
+        return NSLocalizedString("Удалить из списка", comment: "")
+    }
+
+    private var compressHelpText: String {
+        if viewModel.isProcessing {
+            return NSLocalizedString("Дождитесь завершения текущего сжатия", comment: "")
+        }
+        return NSLocalizedString("Сжать файл", comment: "")
+    }
 }
 
+#if DEBUG
 #Preview {
     VStack(spacing: 12) {
         // Pending file
@@ -411,3 +479,4 @@ struct FileRowView: View {
     .frame(width: 700)
     .background(Color.adaptiveSecondaryBackground)
 }
+#endif

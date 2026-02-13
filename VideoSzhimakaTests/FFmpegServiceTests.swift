@@ -55,6 +55,25 @@ final class FFmpegServiceTests: XCTestCase {
         XCTAssertGreaterThan(videoInfo.frameRate, 0)
         XCTAssertNotNil(videoInfo.videoCodec)
     }
+
+    func testGetVideoInfoCachePerformance() async throws {
+        // Прогрев кэша
+        _ = try await ffmpegService.getVideoInfo(url: testVideoURL)
+
+        measure {
+            let expectation = XCTestExpectation(description: "Cached video info")
+            Task {
+                do {
+                    _ = try await self.ffmpegService.getVideoInfo(url: self.testVideoURL)
+                    expectation.fulfill()
+                } catch {
+                    XCTFail("Cached getVideoInfo failed: \(error)")
+                    expectation.fulfill()
+                }
+            }
+            wait(for: [expectation], timeout: 10.0)
+        }
+    }
     
     func testGetVideoInfoWithNonExistentFile() async {
         // Тест с несуществующим файлом

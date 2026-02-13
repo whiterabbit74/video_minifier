@@ -143,13 +143,14 @@ class MockFileManagerService: FileManagerServiceProtocol {
     var fileSizeResult: Result<Int64, Error> = .success(1024 * 1024)
     var fileSizeResults: [URL: Result<Int64, Error>] = [:]
     var deleteFileResult: Result<Void, Error> = .success(())
+    var moveFileResult: Result<Void, Error> = .success(())
     var fileExistsResult = true
     var fileExistsResults: [String: Bool] = [:]
     var openInFinderCallCount = 0
     var deletedFiles: [URL] = []
     var openedInFinderURLs: [URL] = []
     
-    func generateOutputURL(for inputURL: URL) -> URL {
+    func generateOutputURL(for inputURL: URL, behavior: OutputBehavior) -> URL {
         return generateOutputURLResult
     }
     
@@ -175,6 +176,15 @@ class MockFileManagerService: FileManagerServiceProtocol {
         switch deleteFileResult {
         case .success:
             deletedFiles.append(url)
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func moveFile(from sourceURL: URL, to destinationURL: URL) throws {
+        switch moveFileResult {
+        case .success:
+            deletedFiles.append(destinationURL)
         case .failure(let error):
             throw error
         }
@@ -241,6 +251,82 @@ class MockSettingsService: SettingsServiceProtocol, ObservableObject {
         settings = CompressionSettings()
         savedWindowFrame = nil
         savedLogsWindowFrame = nil
+    }
+}
+
+// MARK: - Extension Performance Tests
+
+final class ExtensionsPerformanceTests: XCTestCase {
+    func testFormattedFileSizePerformance() {
+        let sizes: [Int64] = [1_024, 5_120_000, 100_000_000, 2_147_483_648]
+        
+        measure {
+            var totalLength = 0
+            for _ in 0..<5_000 {
+                for size in sizes {
+                    totalLength += size.formattedFileSize.count
+                }
+            }
+            XCTAssertGreaterThan(totalLength, 0)
+        }
+    }
+}
+
+final class FFmpegProgressParsingPerformanceTests: XCTestCase {
+    func testParseProgressLinePerformance() {
+        guard let regex = try? NSRegularExpression(pattern: #"time=(\d{1,2}):(\d{2}):(\d{2})\.(\d{2})"#) else {
+            XCTFail("Failed to compile regex")
+            return
+        }
+        
+        let service = FFmpegServiceMockForPerf()
+        let line = "frame=  240 fps= 24 q=-1.0 size=    1024kB time=00:00:10.00 bitrate= 838.9kbits/s speed=1.0x"
+        
+        measure {
+            var sum = 0.0
+            for _ in 0..<10_000 {
+                if let progress = service.parseProgress(line, totalDuration: 100.0, regex: regex) {
+                    sum += progress
+                }
+            }
+            XCTAssertGreaterThan(sum, 0.0)
+        }
+    }
+}
+
+private final class FFmpegServiceMockForPerf {
+    func parseProgress(_ line: String, totalDuration: TimeInterval, regex: NSRegularExpression) -> Double? {
+        if line.hasPrefix("out_time_ms=") {
+            let timeString = line.replacingOccurrences(of: "out_time_ms=", with: "")
+            if let microseconds = Int64(timeString), microseconds > 0 {
+                let currentTime = TimeInterval(microseconds) / 1_000_000.0
+                guard totalDuration > 0 else { return nil }
+                return min(currentTime / totalDuration, 1.0)
+            }
+        }
+        
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+        guard let match = regex.firstMatch(in: line, range: range) else {
+            return nil
+        }
+        
+        guard let hoursRange = Range(match.range(at: 1), in: line),
+              let minutesRange = Range(match.range(at: 2), in: line),
+              let secondsRange = Range(match.range(at: 3), in: line),
+              let millisecondsRange = Range(match.range(at: 4), in: line) else {
+            return nil
+        }
+        
+        let hours = Int(line[hoursRange]) ?? 0
+        let minutes = Int(line[minutesRange]) ?? 0
+        let seconds = Int(line[secondsRange]) ?? 0
+        let milliseconds = Int(line[millisecondsRange]) ?? 0
+        
+        let currentTime = TimeInterval(hours * 3600 + minutes * 60 + seconds) + TimeInterval(milliseconds) / 100.0
+        
+        guard totalDuration > 0 else { return nil }
+        
+        return min(currentTime / totalDuration, 1.0)
     }
 }
 

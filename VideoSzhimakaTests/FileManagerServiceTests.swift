@@ -50,7 +50,7 @@ final class FileManagerServiceTests: XCTestCase {
         mockFileManager.fileExistsResult = false
         
         // When
-        let result = fileManagerService.generateOutputURL(for: inputURL)
+        let result = fileManagerService.generateOutputURL(for: inputURL, behavior: .appendCompressedToName)
         
         // Then
         XCTAssertEqual(result, expectedURL)
@@ -68,7 +68,7 @@ final class FileManagerServiceTests: XCTestCase {
         ]
         
         // When
-        let result = fileManagerService.generateOutputURL(for: inputURL)
+        let result = fileManagerService.generateOutputURL(for: inputURL, behavior: .appendCompressedToName)
         
         // Then
         XCTAssertEqual(result, expectedURL)
@@ -90,7 +90,7 @@ final class FileManagerServiceTests: XCTestCase {
         ]
         
         // When
-        let result = fileManagerService.generateOutputURL(for: inputURL)
+        let result = fileManagerService.generateOutputURL(for: inputURL, behavior: .appendCompressedToName)
         
         // Then
         XCTAssertEqual(result, expectedURL)
@@ -104,7 +104,7 @@ final class FileManagerServiceTests: XCTestCase {
         mockFileManager.fileExistsResult = false
         
         // When
-        let result = fileManagerService.generateOutputURL(for: inputURL)
+        let result = fileManagerService.generateOutputURL(for: inputURL, behavior: .appendCompressedToName)
         
         // Then
         XCTAssertEqual(result, expectedURL)

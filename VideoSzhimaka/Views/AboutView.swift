@@ -14,7 +14,7 @@ struct AboutView: View {
                     Text(appDisplayName)
                         .font(.title3)
                         .fontWeight(.semibold)
-                    Text("Версия \(appVersion) (\(buildNumber))")
+                    Text(String(format: NSLocalizedString("Версия %@ (%@)", comment: ""), appVersion, buildNumber))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
@@ -23,15 +23,15 @@ struct AboutView: View {
 
             Divider()
 
-            Text("Сторонние компоненты")
+            Text(NSLocalizedString("Сторонние компоненты", comment: ""))
                 .font(.headline)
                 .fontWeight(.medium)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("FFmpeg")
+                Text(NSLocalizedString("FFmpeg", comment: ""))
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                Text("Это приложение включает FFmpeg. Полный текст лицензии ниже.")
+                Text(NSLocalizedString("Это приложение включает FFmpeg. Полный текст лицензии ниже.", comment: ""))
                     .font(.caption)
                     .foregroundColor(.secondary)
                 GroupBox {
@@ -50,7 +50,7 @@ struct AboutView: View {
 
             HStack {
                 Spacer()
-                Button("Закрыть") {
+                Button(NSLocalizedString("Закрыть", comment: "")) {
                     NSApp.keyWindow?.close()
                 }
                 .keyboardShortcut(.cancelAction)
@@ -62,7 +62,7 @@ struct AboutView: View {
     }
 
     private var appDisplayName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Приложение")
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? NSLocalizedString("Приложение", comment: ""))
     }
 
     private var appVersion: String {
@@ -74,7 +74,7 @@ struct AboutView: View {
     }
 
     private var placeholderLicenseNote: String {
-        "Не удалось загрузить текст лицензии FFmpeg из бандла. Убедитесь, что файл Resources/LICENSES/FFmpeg_LICENSE.txt включён в сборку."
+        NSLocalizedString("Не удалось загрузить текст лицензии FFmpeg из бандла. Убедитесь, что файл Resources/LICENSES/FFmpeg_LICENSE.txt включён в сборку.", comment: "")
     }
 
     private func loadLicense() {

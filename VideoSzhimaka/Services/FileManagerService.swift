@@ -22,10 +22,26 @@ final class FileManagerService: FileManagerServiceProtocol {
     
     // MARK: - FileManagerServiceProtocol Implementation
     
-    func generateOutputURL(for inputURL: URL) -> URL {
+    func generateOutputURL(for inputURL: URL, behavior: OutputBehavior) -> URL {
         let directory = inputURL.deletingLastPathComponent()
         let filename = inputURL.deletingPathExtension().lastPathComponent
-        let baseOutputURL = directory.appendingPathComponent("\(filename)_compressed.mp4")
+        let targetDirectory: URL
+        let baseName: String
+        
+        switch behavior {
+        case .appendCompressedToName, .replaceOriginal:
+            targetDirectory = directory
+            baseName = "\(filename)_compressed"
+        case .subfolderCompressed:
+            let compressedDirectory = directory.appendingPathComponent("compressed", isDirectory: true)
+            if !fileManager.fileExists(atPath: compressedDirectory.path) {
+                try? fileManager.createDirectory(at: compressedDirectory, withIntermediateDirectories: true)
+            }
+            targetDirectory = compressedDirectory
+            baseName = filename
+        }
+        
+        let baseOutputURL = targetDirectory.appendingPathComponent("\(baseName).mp4")
         
         // If the file doesn't exist, return the base URL
         if !fileExists(at: baseOutputURL) {
@@ -45,6 +61,21 @@ final class FileManagerService: FileManagerServiceProtocol {
             try fileManager.removeItem(at: url)
         } catch {
             throw FileManagerError.deletionFailed(url, error)
+        }
+    }
+    
+    func moveFile(from sourceURL: URL, to destinationURL: URL) throws {
+        guard fileExists(at: sourceURL) else {
+            throw FileManagerError.fileNotFound(sourceURL)
+        }
+        
+        do {
+            if fileExists(at: destinationURL) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.moveItem(at: sourceURL, to: destinationURL)
+        } catch {
+            throw FileManagerError.deletionFailed(destinationURL, error)
         }
     }
     

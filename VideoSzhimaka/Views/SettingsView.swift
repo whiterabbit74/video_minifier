@@ -47,6 +47,11 @@ struct SettingsView: View {
                         CRFSettingsView(viewModel: viewModel)
                     }
                     
+                    // Resolution Section
+                    SettingsSection(title: NSLocalizedString("Разрешение", comment: ""), icon: "arrow.up.left.and.arrow.down.right") {
+                        ResolutionSettingsView(viewModel: viewModel)
+                    }
+                    
                     // Codec Section
                     SettingsSection(title: NSLocalizedString("Кодек", comment: ""), icon: "gear") {
                         CodecSettingsView(viewModel: viewModel)
@@ -73,7 +78,7 @@ struct SettingsView: View {
                 .padding(20)
             }
         }
-        .frame(width: 500, height: 600)
+        .frame(minWidth: 720, minHeight: 640)
         .background(Color.adaptiveBackground)
         .confirmationDialog(
             NSLocalizedString("Сброс настроек", comment: ""),
@@ -105,11 +110,15 @@ struct SettingsView: View {
         } message: {
             Text(NSLocalizedString("Есть несохранённые изменения. Сохранить их перед закрытием?", comment: ""))
         }
+
         .alert(NSLocalizedString("Требуется перезапуск", comment: ""), isPresented: $viewModel.restartRequired) {
             Button(NSLocalizedString("Перезапустить сейчас", comment: "")) {
-                NSApp.terminate(nil) // Relaunch logic is complex, simpler to just quit
+                viewModel.restartApp()
             }
-            Button(NSLocalizedString("Позже", comment: "")) {}
+            Button(NSLocalizedString("Позже", comment: "")) {
+                // Just dismiss the alert, user can restart manually later
+                viewModel.restartRequired = false
+            }
         } message: {
             Text(NSLocalizedString("Чтобы изменить язык, необходимо перезапустить приложение", comment: ""))
         }
@@ -198,6 +207,9 @@ struct GeneralSettingsView: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
             
+            // We bind simply to the settings language. The ViewModel handles the side effects.
+            // The key fix is ensuring that the restart alert is presented at the top level
+            // and persists even if the view refreshes.
             Picker("", selection: $viewModel.settings.language) {
                 ForEach(AppLanguage.allCases) { lang in
                     Text(lang.localizedName).tag(lang)
@@ -205,6 +217,11 @@ struct GeneralSettingsView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .onChange(of: viewModel.settings.language) { _ in
+                 // Trigger save immediately to check for language change
+                 // This is where 'restartRequired' gets set in the ViewModel
+                 viewModel.saveSettings()
+            }
         }
     }
 }
@@ -216,8 +233,101 @@ struct CRFSettingsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text(NSLocalizedString("Режим контроля", comment: ""))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.rateControlMode) {
+                ForEach(RateControlMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .onChange(of: viewModel.settings.rateControlMode) { newMode in
+                viewModel.updateRateControlMode(newMode)
+            }
+            
+            Text(viewModel.rateControlDescription)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            if viewModel.settings.rateControlMode == .targetBitrate {
+                HStack {
+                    Text(NSLocalizedString("Целевой битрейт", comment: ""))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    Text("\(viewModel.settings.targetBitrateKbps) kbps")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.accentColor)
+                }
+                
+                Slider(
+                    value: Binding(
+                        get: { Double(viewModel.settings.targetBitrateKbps) },
+                        set: { viewModel.settings.targetBitrateKbps = Int($0.rounded()) }
+                    ),
+                    in: 300...15000,
+                    step: 50
+                )
+            }
+            
+            if viewModel.settings.rateControlMode == .targetSize {
+                HStack {
+                    Text(NSLocalizedString("Целевой размер", comment: ""))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    Text("\(viewModel.settings.targetSizeMB) MB")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.accentColor)
+                }
+                
+                Slider(
+                    value: Binding(
+                        get: { Double(viewModel.settings.targetSizeMB) },
+                        set: { viewModel.settings.targetSizeMB = Int($0.rounded()) }
+                    ),
+                    in: 5...2000,
+                    step: 5
+                )
+            }
+            
+            Divider()
+                .padding(.vertical, 4)
+            
+            Text(NSLocalizedString("Баланс размер/качество", comment: ""))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.qualityPreset) {
+                ForEach(QualityPreset.allCases) { preset in
+                    Text(preset.displayName).tag(preset)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .onChange(of: viewModel.settings.qualityPreset) { newPreset in
+                viewModel.updateQualityPreset(newPreset)
+            }
+            .disabled(!viewModel.isCRFMode)
+            
+            Text(viewModel.qualityPresetDescription)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Divider()
+                .padding(.vertical, 4)
+            
             HStack {
-                Text("CRF (Constant Rate Factor)")
+                Text(NSLocalizedString("CRF (Constant Rate Factor)", comment: ""))
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
@@ -234,7 +344,7 @@ struct CRFSettingsView: View {
                 in: viewModel.crfRange,
                 step: 1
             ) {
-                Text("CRF")
+                Text(NSLocalizedString("CRF", comment: ""))
             } minimumValueLabel: {
                 Text("\(Int(viewModel.crfRange.lowerBound))")
                     .font(.caption)
@@ -244,6 +354,7 @@ struct CRFSettingsView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            .disabled(!viewModel.isCRFMode)
             
             Text(viewModel.crfDescription)
                 .font(.caption)
@@ -299,6 +410,27 @@ struct CodecSettingsView: View {
             
             Toggle(NSLocalizedString("Использовать аппаратное ускорение", comment: ""), isOn: $viewModel.settings.useHardwareAcceleration)
                 .font(.subheadline)
+            
+            Divider()
+            
+            Text(NSLocalizedString("Скорость кодирования", comment: ""))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.encodingSpeed) {
+                ForEach(EncodingSpeed.allCases) { speed in
+                    Text(speed.displayName).tag(speed)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .disabled(viewModel.settings.useHardwareAcceleration)
+            
+            if viewModel.settings.useHardwareAcceleration {
+                Text(NSLocalizedString("Скорость задаётся аппаратным кодировщиком", comment: ""))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
@@ -318,6 +450,41 @@ struct AudioSettingsView: View {
                  NSLocalizedString("Аудио будет перекодировано в AAC 128kbps", comment: ""))
                 .font(.caption)
                 .foregroundColor(.secondary)
+            
+            if !viewModel.settings.copyAudio {
+                HStack {
+                    Text(NSLocalizedString("Битрейт аудио", comment: ""))
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    Text("\(viewModel.settings.audioBitrateKbps) kbps")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.accentColor)
+                }
+                
+                Slider(
+                    value: Binding(
+                        get: { Double(viewModel.settings.audioBitrateKbps) },
+                        set: { viewModel.settings.audioBitrateKbps = Int($0.rounded()) }
+                    ),
+                    in: 64...320,
+                    step: 16
+                )
+                
+                Text(NSLocalizedString("Каналы", comment: ""))
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                
+                Picker("", selection: $viewModel.settings.audioChannels) {
+                    Text(NSLocalizedString("1 (Mono)", comment: "")).tag(1)
+                    Text(NSLocalizedString("2 (Stereo)", comment: "")).tag(2)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+            }
         }
     }
 }
@@ -330,8 +497,17 @@ struct BehaviorSettingsView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Toggle(NSLocalizedString("Удалять оригинальные файлы после сжатия", comment: ""), isOn: $viewModel.settings.deleteOriginals)
+            Text(NSLocalizedString("Поведение выхода файла", comment: ""))
                 .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.outputBehavior) {
+                ForEach(OutputBehavior.allCases) { behavior in
+                    Text(behavior.localizedName).tag(behavior)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
             
             Toggle(NSLocalizedString("Автоматически закрыть приложение после завершения", comment: ""), isOn: $viewModel.settings.autoCloseApp)
                 .font(.subheadline)
@@ -377,7 +553,7 @@ struct AppDisplaySettingsView: View {
                 }
             }
             .labelsHidden()
-            .pickerStyle(.radioGroup)
+            .pickerStyle(.segmented)
             
             if !viewModel.settings.showInDock && !viewModel.settings.showInMenuBar {
                  HStack(spacing: 6) {
@@ -390,6 +566,32 @@ struct AppDisplaySettingsView: View {
                         .foregroundColor(.orange)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Resolution Settings
+
+struct ResolutionSettingsView: View {
+    @ObservedObject var viewModel: SettingsViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(NSLocalizedString("Выходное разрешение", comment: ""))
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Picker("", selection: $viewModel.settings.resolutionPreset) {
+                ForEach(ResolutionPreset.allCases) { preset in
+                    Text(preset.displayName).tag(preset)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            
+            Text(NSLocalizedString("Масштабирование выполняется только при превышении выбранного размера", comment: ""))
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 }
@@ -430,6 +632,8 @@ struct ResetSettingsView: View {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview {
     SettingsView(viewModel: .preview)
 }
+#endif

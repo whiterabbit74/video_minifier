@@ -123,6 +123,8 @@ struct AppIconView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     AppIconView(size: 128)
 }
+#endif

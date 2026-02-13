@@ -9,7 +9,11 @@ class MainViewModel: ObservableObject {
     // MARK: - Published Properties
     
     /// List of video files in the compression queue
-    @Published var videoFiles: [VideoFile] = []
+    @Published var videoFiles: [VideoFile] = [] {
+        didSet {
+            recomputeAggregates()
+        }
+    }
     
     /// Whether any compression operation is currently in progress
     @Published var isProcessing = false
@@ -45,6 +49,28 @@ class MainViewModel: ObservableObject {
     
     /// Task for current compression operation (for cancellation)
     private var currentCompressionTask: Task<Void, Never>?
+
+    /// Index cache for fast lookup by file ID
+    private var videoFileIndexById: [UUID: Int] = [:]
+    
+    /// Set of input URLs to prevent duplicate additions
+    private var inputURLSet: Set<URL> = []
+    
+    private enum StatusBucket: CaseIterable {
+        case pending
+        case compressing
+        case completed
+        case failed
+    }
+    
+    private var statusCounts: [StatusBucket: Int] = [:]
+    private var failedStatusCountsByError: [String: Int] = [:]
+    private var cachedTotalOriginalSize: Int64 = 0
+    private var cachedTotalCompressedSize: Int64 = 0
+    private var cachedCompletedOriginalSize: Int64 = 0
+    private var cachedCompletedCompressedSize: Int64 = 0
+    
+    private var lastPerformanceSampleTime: Date?
     
     // MARK: - Initialization
     
@@ -68,24 +94,46 @@ class MainViewModel: ObservableObject {
     
     /// Add video files from URLs (drag & drop or file dialog)
     /// - Parameter urls: Array of file URLs to add
-    func addFiles(_ urls: [URL]) {
+    @discardableResult
+    func addFiles(_ urls: [URL], settingsOverride: CompressionSettings? = nil) -> [UUID] {
+        var addedFileIds: [UUID] = []
+
         // Добавляем файлы синхронно (метаданные подтянутся асинхронно внутри)
         for url in urls {
-            addSingleFile(url)
+            if let fileId = addSingleFile(url, settingsOverride: settingsOverride) {
+                addedFileIds.append(fileId)
+            }
+        }
+
+        return addedFileIds
+    }
+
+    /// Add files and immediately enqueue them for compression
+    func addAndCompressFiles(_ urls: [URL], settingsOverride: CompressionSettings? = nil) {
+        let addedFileIds = addFiles(urls, settingsOverride: settingsOverride)
+        for fileId in addedFileIds {
+            compressFile(withId: fileId)
         }
     }
     
     /// Add a single video file
     /// - Parameter url: URL of the video file to add
-    private func addSingleFile(_ url: URL) {
+    private func addSingleFile(_ url: URL, settingsOverride: CompressionSettings?) -> UUID? {
+        let canonicalURL = url.standardizedFileURL
         // Check if file already exists in the list
-        if videoFiles.contains(where: { $0.url == url || $0.originalURL == url }) {
-            loggingService.warning("Файл уже добавлен: \(url.lastPathComponent)", category: "FileManagement")
-            return
+        if inputURLSet.contains(canonicalURL) {
+            loggingService.warning(
+                String(format: NSLocalizedString("Файл уже добавлен: %@", comment: ""), canonicalURL.lastPathComponent),
+                category: "FileManagement"
+            )
+            return nil
         }
         
         do {
-            loggingService.info("Добавление файла: \(url.lastPathComponent)", category: "FileManagement")
+            loggingService.info(
+                String(format: NSLocalizedString("Добавление файла: %@", comment: ""), url.lastPathComponent),
+                category: "FileManagement"
+            )
             
             // Сначала получаем размер файла и добавляем файл с базовой информацией
             let fileSize = try fileManagerService.getFileSize(url: url)
@@ -95,12 +143,18 @@ class MainViewModel: ObservableObject {
                 url: url,
                 name: url.lastPathComponent,
                 duration: 0, // Будет обновлено позже
-                originalSize: fileSize
+                originalSize: fileSize,
+                customCompressionSettings: settingsOverride
             )
             
             // Добавляем в список сразу для быстрого отображения
             videoFiles.append(videoFile)
-            loggingService.info("Файл добавлен в список (анализ метаданных...): \(url.lastPathComponent)", category: "FileManagement")
+            videoFileIndexById[videoFile.id] = videoFiles.count - 1
+            inputURLSet.insert(canonicalURL)
+            loggingService.info(
+                String(format: NSLocalizedString("Файл добавлен в список (анализ метаданных...): %@", comment: ""), url.lastPathComponent),
+                category: "FileManagement"
+            )
             
             // Теперь получаем полную информацию о видео в фоне
             Task {
@@ -108,30 +162,52 @@ class MainViewModel: ObservableObject {
                     let videoInfo = try await ffmpegService.getVideoInfo(url: url)
                     
                     // Обновляем информацию о файле
-                    if let index = videoFiles.firstIndex(where: { $0.id == videoFile.id }) {
+                    if let index = indexForFileId(videoFile.id) {
                         var updatedFile = videoFiles[index]
                         updatedFile.duration = videoInfo.duration
                         videoFiles[index] = updatedFile
                         
-                        loggingService.info("Метаданные получены: \(url.lastPathComponent) (длительность: \(videoInfo.duration.formattedDuration))", category: "FileManagement")
+                        loggingService.info(
+                            String(
+                                format: NSLocalizedString("Метаданные получены: %@ (длительность: %@)", comment: ""),
+                                url.lastPathComponent,
+                                videoInfo.duration.formattedDuration
+                            ),
+                            category: "FileManagement"
+                        )
                     }
                 } catch {
                     let compressionError = mapToCompressionError(error)
-                    loggingService.error("Не удалось получить метаданные для \(url.lastPathComponent): \(compressionError.localizedDescription)", category: "FileManagement")
+                    loggingService.error(
+                        String(
+                            format: NSLocalizedString("Не удалось получить метаданные для %@: %@", comment: ""),
+                            url.lastPathComponent,
+                            compressionError.localizedDescription
+                        ),
+                        category: "FileManagement"
+                    )
                     
                     // Помечаем файл как проблемный, но не удаляем из списка
-                    if let index = videoFiles.firstIndex(where: { $0.id == videoFile.id }) {
+                    if let index = indexForFileId(videoFile.id) {
                         var updatedFile = videoFiles[index]
                         updatedFile.status = .failed(compressionError)
                         videoFiles[index] = updatedFile
                     }
                 }
             }
-            
+            return videoFile.id
         } catch {
             let compressionError = mapToCompressionError(error)
-            loggingService.error("Не удалось добавить файл \(url.lastPathComponent): \(compressionError.localizedDescription)", category: "FileManagement")
+            loggingService.error(
+                String(
+                    format: NSLocalizedString("Не удалось добавить файл %@: %@", comment: ""),
+                    url.lastPathComponent,
+                    compressionError.localizedDescription
+                ),
+                category: "FileManagement"
+            )
             showError(compressionError)
+            return nil
         }
     }
     
@@ -140,20 +216,29 @@ class MainViewModel: ObservableObject {
     func removeFile(withId fileId: UUID) {
         // Don't allow removal of currently processing file
         if currentlyProcessingFileId == fileId {
-            loggingService.warning("Попытка удалить файл, который сейчас обрабатывается", category: "FileManagement")
+            loggingService.warning(NSLocalizedString("Попытка удалить файл, который сейчас обрабатывается", comment: ""), category: "FileManagement")
             return
         }
         
         // Find file name for logging
-        let fileName = videoFiles.first(where: { $0.id == fileId })?.name ?? "Unknown"
+        let fileName = indexForFileId(fileId).map { videoFiles[$0].name } ?? "Unknown"
         
         // Remove from processing queue if present
         processingQueue.removeAll { $0 == fileId }
         
         // Remove from video files list
-        videoFiles.removeAll { $0.id == fileId }
+        if let index = indexForFileId(fileId) {
+            let removedFile = videoFiles[index]
+            videoFiles.remove(at: index)
+            videoFileIndexById.removeValue(forKey: fileId)
+            inputURLSet.remove(removedFile.originalURL.standardizedFileURL)
+            rebuildIndexCache(from: index)
+        }
         
-        loggingService.info("Файл удален из списка: \(fileName)", category: "FileManagement")
+        loggingService.info(
+            String(format: NSLocalizedString("Файл удален из списка: %@", comment: ""), fileName),
+            category: "FileManagement"
+        )
     }
     
     /// Remove all files from the list
@@ -163,8 +248,38 @@ class MainViewModel: ObservableObject {
         
         // Clear all data
         videoFiles.removeAll()
+        videoFileIndexById.removeAll()
+        inputURLSet.removeAll()
         processingQueue.removeAll()
         currentlyProcessingFileId = nil
+    }
+
+    /// Remove completed files from the list
+    func removeCompletedFiles() {
+        let remainingFiles = videoFiles.filter { file in
+            if case .completed = file.status {
+                return false
+            }
+            return true
+        }
+
+        if remainingFiles.count == videoFiles.count {
+            return
+        }
+
+        videoFiles = remainingFiles
+        videoFileIndexById.removeAll()
+        inputURLSet = Set(remainingFiles.map { $0.originalURL.standardizedFileURL })
+        processingQueue.removeAll { id in
+            !remainingFiles.contains(where: { $0.id == id })
+        }
+        for (index, file) in remainingFiles.enumerated() {
+            videoFileIndexById[file.id] = index
+        }
+        if let currentId = currentlyProcessingFileId,
+           !remainingFiles.contains(where: { $0.id == currentId }) {
+            currentlyProcessingFileId = nil
+        }
     }
     
     // MARK: - Compression Operations
@@ -172,7 +287,7 @@ class MainViewModel: ObservableObject {
     /// Compress a single video file
     /// - Parameter fileId: ID of the file to compress
     func compressFile(withId fileId: UUID) {
-        guard videoFiles.firstIndex(where: { $0.id == fileId }) != nil else {
+        guard indexForFileId(fileId) != nil else {
             return
         }
         
@@ -209,7 +324,7 @@ class MainViewModel: ObservableObject {
     
     /// Cancel all compression operations
     func cancelAllProcessing() {
-        loggingService.info("Отмена всех операций сжатия", category: "Compression")
+        loggingService.info(NSLocalizedString("Отмена всех операций сжатия", comment: ""), category: "Compression")
         
         // Store references before clearing to avoid race conditions
         let taskToCancel = currentCompressionTask
@@ -234,7 +349,10 @@ class MainViewModel: ObservableObject {
                 videoFiles[index].compressionProgress = 0.0
                 
                 if videoFiles[index].id == previouslyProcessingFileId {
-                    loggingService.info("Отменено сжатие файла: \(videoFiles[index].name)", category: "Compression")
+                    loggingService.info(
+                        String(format: NSLocalizedString("Отменено сжатие файла: %@", comment: ""), videoFiles[index].name),
+                        category: "Compression"
+                    )
                 }
             }
         }
@@ -259,7 +377,7 @@ class MainViewModel: ObservableObject {
         let fileId = processingQueue.removeFirst()
         
         // Find the file in the list
-        guard let fileIndex = videoFiles.firstIndex(where: { $0.id == fileId }) else {
+        guard let fileIndex = indexForFileId(fileId) else {
             // File not found, process next
             processNextFile()
             return
@@ -281,7 +399,7 @@ class MainViewModel: ObservableObject {
         currentCompressionTask = Task {
             do {
                 try Task.checkCancellation()
-                await compressFileAtIndex(fileIndex)
+                await compressFile(withId: fileId)
                 
                 // Check if task was cancelled before processing next file
                 try Task.checkCancellation()
@@ -291,12 +409,15 @@ class MainViewModel: ObservableObject {
                     processNextFile()
                 }
             } catch is CancellationError {
-                loggingService.info("Задача сжатия была отменена", category: "Compression")
+                loggingService.info(NSLocalizedString("Задача сжатия была отменена", comment: ""), category: "Compression")
                 // Ensure processing state is cleared on cancellation
                 isProcessing = false
                 currentlyProcessingFileId = nil
             } catch {
-                loggingService.error("Неожиданная ошибка в задаче сжатия: \(error)", category: "Compression")
+                loggingService.error(
+                    String(format: NSLocalizedString("Неожиданная ошибка в задаче сжатия: %@", comment: ""), String(describing: error)),
+                    category: "Compression"
+                )
                 // Process next file even on error, but only if still processing
                 if isProcessing {
                     processNextFile()
@@ -305,23 +426,27 @@ class MainViewModel: ObservableObject {
         }
     }
     
-    /// Compress the file at the specified index
-    /// - Parameter index: Index of the file in the videoFiles array
-    private func compressFileAtIndex(_ index: Int) async {
-        // Safely get the file and validate index bounds
-        guard index >= 0 && index < videoFiles.count else {
-            loggingService.error("Недопустимый индекс файла: \(index), размер массива: \(videoFiles.count)", category: "Compression")
+    /// Compress the file with the specified ID
+    /// - Parameter fileId: ID of the file in the videoFiles array
+    private func compressFile(withId fileId: UUID) async {
+        guard let index = indexForFileId(fileId) else {
+            loggingService.warning(
+                String(format: NSLocalizedString("Файл не найден при попытке обработки: %@", comment: ""), fileId.uuidString),
+                category: "Compression"
+            )
             return
         }
         
         let file = videoFiles[index]
-        let fileId = file.id
         
         do {
             // Check for cancellation before starting
             try Task.checkCancellation()
             
-            loggingService.info("Начало сжатия файла: \(file.name)", category: "Compression")
+            loggingService.info(
+                String(format: NSLocalizedString("Начало сжатия файла: %@", comment: ""), file.name),
+                category: "Compression"
+            )
             
             // Start performance monitoring
             performanceMonitor.startMonitoring()
@@ -331,18 +456,18 @@ class MainViewModel: ObservableObject {
             let recommendations = performanceMonitor.getRecommendedSettings()
             
             if recommendations.suggestPauseProcessing {
-                loggingService.warning("Система перегрета, рекомендуется пауза в обработке", category: "Performance")
+                loggingService.warning(NSLocalizedString("Система перегрета, рекомендуется пауза в обработке", comment: ""), category: "Performance")
             }
             
-            // Generate output URL
-            let outputURL = fileManagerService.generateOutputURL(for: file.originalURL)
-            
-            // Adjust settings based on performance recommendations
-            var adjustedSettings = settingsService.settings
+            // Prefer per-file settings for monitored files; fallback to current global settings.
+            var adjustedSettings = file.customCompressionSettings ?? settingsService.settings
             if recommendations.suggestThermalThrottling {
                 adjustedSettings.useHardwareAcceleration = false
-                loggingService.info("Отключено аппаратное ускорение из-за перегрева", category: "Performance")
+                loggingService.info(NSLocalizedString("Отключено аппаратное ускорение из-за перегрева", comment: ""), category: "Performance")
             }
+
+            // Generate output URL
+            let outputURL = fileManagerService.generateOutputURL(for: file.originalURL, behavior: adjustedSettings.outputBehavior)
             
             // Check for cancellation before starting compression
             try Task.checkCancellation()
@@ -359,10 +484,15 @@ class MainViewModel: ObservableObject {
                     
                     self.updateCompressionProgress(fileId: fileId, progress: progress)
                     
-                    // Monitor performance during compression
-                    let _ = self.performanceMonitor.getCurrentMetrics()
-                    if self.performanceMonitor.isUnderThermalPressure() {
-                        self.loggingService.warning("Обнаружен перегрев во время сжатия", category: "Performance")
+                    // Monitor performance during compression (rate-limited)
+                    let now = Date()
+                    if self.lastPerformanceSampleTime == nil ||
+                        now.timeIntervalSince(self.lastPerformanceSampleTime ?? now) >= 1.0 {
+                        self.lastPerformanceSampleTime = now
+                        let _ = self.performanceMonitor.getCurrentMetrics()
+                        if self.performanceMonitor.isUnderThermalPressure() {
+                            self.loggingService.warning(NSLocalizedString("Обнаружен перегрев во время сжатия", comment: ""), category: "Performance")
+                        }
                     }
                 }
             }
@@ -376,14 +506,34 @@ class MainViewModel: ObservableObject {
             let isCompressedLarger = compressedSize > file.originalSize
 
             // Safely update file status using fileId instead of index
-            if let currentIndex = videoFiles.firstIndex(where: { $0.id == fileId }) {
+            if let currentIndex = indexForFileId(fileId) {
                 videoFiles[currentIndex].status = .completed
                 videoFiles[currentIndex].compressedSize = compressedSize
                 videoFiles[currentIndex].compressionProgress = 1.0
 
                 if !isCompressedLarger {
-                    videoFiles[currentIndex].url = outputURL
-                    videoFiles[currentIndex].name = outputURL.lastPathComponent
+                    switch adjustedSettings.outputBehavior {
+                    case .replaceOriginal:
+                        do {
+                            try fileManagerService.moveFile(from: outputURL, to: file.originalURL)
+                            videoFiles[currentIndex].url = file.originalURL
+                            videoFiles[currentIndex].name = file.originalURL.lastPathComponent
+                        } catch {
+                            loggingService.error(
+                                String(
+                                    format: NSLocalizedString("Не удалось заменить исходный файл: %@: %@", comment: ""),
+                                    file.name,
+                                    error.localizedDescription
+                                ),
+                                category: "FileManagement"
+                            )
+                            videoFiles[currentIndex].url = outputURL
+                            videoFiles[currentIndex].name = outputURL.lastPathComponent
+                        }
+                    case .appendCompressedToName, .subfolderCompressed:
+                        videoFiles[currentIndex].url = outputURL
+                        videoFiles[currentIndex].name = outputURL.lastPathComponent
+                    }
                 }
             }
 
@@ -391,35 +541,62 @@ class MainViewModel: ObservableObject {
 
             // Log performance metrics
             let finalMetrics = performanceMonitor.getCurrentMetrics()
-            loggingService.info("Сжатие завершено: \(file.name) (\(file.originalSize.formattedFileSize) → \(compressedSize.formattedFileSize), экономия: \(String(format: "%.1f", compressionRatio))%)", category: "Compression")
-            loggingService.info("Производительность: CPU \(String(format: "%.1f", finalMetrics.cpuUsage))%, Память \(String(format: "%.1f", finalMetrics.memoryUsage))MB, Температура: \(finalMetrics.thermalState.description)", category: "Performance")
+            loggingService.info(
+                String(
+                    format: NSLocalizedString("Сжатие завершено: %@ (%@ → %@, экономия: %@%%)", comment: ""),
+                    file.name,
+                    file.originalSize.formattedFileSize,
+                    compressedSize.formattedFileSize,
+                    String(format: "%.1f", compressionRatio)
+                ),
+                category: "Compression"
+            )
+            loggingService.info(
+                String(
+                    format: NSLocalizedString("Производительность: CPU %@%%, Память %@MB, Температура: %@", comment: ""),
+                    String(format: "%.1f", finalMetrics.cpuUsage),
+                    String(format: "%.1f", finalMetrics.memoryUsage),
+                    finalMetrics.thermalState.description
+                ),
+                category: "Performance"
+            )
 
             // If compressed file is larger than original, delete the compressed file immediately
             if isCompressedLarger {
                 do {
                     try fileManagerService.deleteFile(at: outputURL)
-                    loggingService.warning("Сжатый файл больше оригинала, удаляю сжатую версию: \(outputURL.lastPathComponent)", category: "FileManagement")
+                    loggingService.warning(
+                        String(
+                            format: NSLocalizedString("Сжатый файл больше оригинала, удаляю сжатую версию: %@", comment: ""),
+                            outputURL.lastPathComponent
+                        ),
+                        category: "FileManagement"
+                    )
                 } catch {
-                    loggingService.error("Не удалось удалить сжатый файл: \(outputURL.lastPathComponent): \(error.localizedDescription)", category: "FileManagement")
+                    loggingService.error(
+                        String(
+                            format: NSLocalizedString("Не удалось удалить сжатый файл: %@: %@", comment: ""),
+                            outputURL.lastPathComponent,
+                            error.localizedDescription
+                        ),
+                        category: "FileManagement"
+                    )
                 }
             }
             
-            // Delete original file if requested, but only when compressed is not larger
-            if settingsService.settings.deleteOriginals {
-                if !isCompressedLarger {
-                    try fileManagerService.deleteFile(at: file.originalURL)
-                    loggingService.info("Оригинальный файл удален: \(file.name)", category: "FileManagement")
-                } else {
-                    loggingService.info("Оригинал НЕ удален, так как сжатый файл оказался больше", category: "FileManagement")
-                }
+            if adjustedSettings.outputBehavior == .replaceOriginal && isCompressedLarger {
+                loggingService.info(NSLocalizedString("Оригинал НЕ заменен, так как сжатый файл оказался больше", comment: ""), category: "FileManagement")
             }
             
         } catch is CancellationError {
             // Handle cancellation gracefully
-            loggingService.info("Сжатие файла отменено: \(file.name)", category: "Compression")
+            loggingService.info(
+                String(format: NSLocalizedString("Сжатие файла отменено: %@", comment: ""), file.name),
+                category: "Compression"
+            )
             
             // Safely reset file status using fileId instead of index
-            if let currentIndex = videoFiles.firstIndex(where: { $0.id == fileId }) {
+            if let currentIndex = indexForFileId(fileId) {
                 if videoFiles[currentIndex].status == .compressing {
                     videoFiles[currentIndex].status = .pending
                     videoFiles[currentIndex].compressionProgress = 0.0
@@ -432,10 +609,13 @@ class MainViewModel: ObservableObject {
             
             // Проверяем, не является ли это отменой операции
             if case .cancelled = compressionError {
-                loggingService.info("Сжатие файла отменено пользователем: \(file.name)", category: "Compression")
+                loggingService.info(
+                    String(format: NSLocalizedString("Сжатие файла отменено пользователем: %@", comment: ""), file.name),
+                    category: "Compression"
+                )
                 
                 // Safely reset file status for cancelled operations
-                if let currentIndex = videoFiles.firstIndex(where: { $0.id == fileId }) {
+                if let currentIndex = indexForFileId(fileId) {
                     if videoFiles[currentIndex].status == .compressing {
                         videoFiles[currentIndex].status = .pending
                         videoFiles[currentIndex].compressionProgress = 0.0
@@ -447,12 +627,19 @@ class MainViewModel: ObservableObject {
             }
             
             // Safely update file status using fileId instead of index
-            if let currentIndex = videoFiles.firstIndex(where: { $0.id == fileId }) {
+            if let currentIndex = indexForFileId(fileId) {
                 videoFiles[currentIndex].status = .failed(compressionError)
                 videoFiles[currentIndex].compressionProgress = 0.0
             }
             
-            loggingService.error("Ошибка сжатия файла \(file.name): \(compressionError.localizedDescription)", category: "Compression")
+            loggingService.error(
+                String(
+                    format: NSLocalizedString("Ошибка сжатия файла %@: %@", comment: ""),
+                    file.name,
+                    compressionError.localizedDescription
+                ),
+                category: "Compression"
+            )
             
             // Add to batch errors for later display
             batchErrors.append(compressionError)
@@ -475,7 +662,7 @@ class MainViewModel: ObservableObject {
     ///   - fileId: ID of the file being compressed
     ///   - progress: Progress value (0.0 to 1.0)
     private func updateCompressionProgress(fileId: UUID, progress: Double) {
-        guard let index = videoFiles.firstIndex(where: { $0.id == fileId }) else {
+        guard let index = indexForFileId(fileId) else {
             return
         }
         
@@ -519,8 +706,9 @@ class MainViewModel: ObservableObject {
     /// - Parameter providers: Array of NSItemProvider objects
     /// - Returns: True if items can be dropped, false otherwise
     func canDropItems(_ providers: [NSItemProvider]) -> Bool {
+        let fileURLType = UTType.fileURL.identifier
         return providers.allSatisfy { provider in
-            provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+            provider.hasItemConformingToTypeIdentifier(fileURLType)
         }
     }
     
@@ -535,7 +723,8 @@ class MainViewModel: ObservableObject {
         for provider in providers {
             group.enter()
             
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+            let fileURLType = UTType.fileURL.identifier
+            provider.loadItem(forTypeIdentifier: fileURLType, options: nil) { item, error in
                 defer { group.leave() }
                 
                 if let data = item as? Data,
@@ -638,33 +827,36 @@ class MainViewModel: ObservableObject {
     /// - Parameter status: Status to count
     /// - Returns: Number of files with the specified status
     func fileCount(withStatus status: CompressionStatus) -> Int {
-        return videoFiles.filter { $0.status == status }.count
+        switch status {
+        case .pending:
+            return statusCounts[.pending] ?? 0
+        case .compressing:
+            return statusCounts[.compressing] ?? 0
+        case .completed:
+            return statusCounts[.completed] ?? 0
+        case .failed(let error):
+            return failedStatusCountsByError[error.localizedDescription] ?? 0
+        }
     }
     
     /// Get total original size of all files
     /// - Returns: Total size in bytes
     var totalOriginalSize: Int64 {
-        return videoFiles.reduce(0) { $0 + $1.originalSize }
+        return cachedTotalOriginalSize
     }
     
     /// Get total compressed size of completed files
     /// - Returns: Total compressed size in bytes
     var totalCompressedSize: Int64 {
-        return videoFiles.compactMap { $0.compressedSize }.reduce(0, +)
+        return cachedTotalCompressedSize
     }
     
     /// Get overall compression ratio
     /// - Returns: Compression ratio as percentage, or nil if no files compressed
     var overallCompressionRatio: Double? {
-        let completedFiles = videoFiles.filter { $0.status == .completed }
-        guard !completedFiles.isEmpty else { return nil }
-        
-        let totalOriginal = completedFiles.reduce(0) { $0 + $1.originalSize }
-        let totalCompressed = completedFiles.compactMap { $0.compressedSize }.reduce(0, +)
-        
-        guard totalOriginal > 0 else { return nil }
-        
-        return (1.0 - Double(totalCompressed) / Double(totalOriginal)) * 100.0
+        guard statusCounts[.completed, default: 0] > 0 else { return nil }
+        guard cachedCompletedOriginalSize > 0 else { return nil }
+        return (1.0 - Double(cachedCompletedCompressedSize) / Double(cachedCompletedOriginalSize)) * 100.0
     }
     
     // MARK: - File Actions
@@ -672,17 +864,17 @@ class MainViewModel: ObservableObject {
     /// Open file location in Finder
     /// - Parameter fileId: ID of the file to show in Finder
     func openFileInFinder(withId fileId: UUID) {
-        guard let file = videoFiles.first(where: { $0.id == fileId }) else {
+        guard let index = indexForFileId(fileId) else {
             return
         }
         
-        fileManagerService.openInFinder(url: file.url)
+        fileManagerService.openInFinder(url: videoFiles[index].url)
     }
     
     /// Retry compression for a failed file
     /// - Parameter fileId: ID of the file to retry
     func retryCompression(forFileId fileId: UUID) {
-        guard let index = videoFiles.firstIndex(where: { $0.id == fileId }),
+        guard let index = indexForFileId(fileId),
               case .failed = videoFiles[index].status else {
             return
         }
@@ -691,7 +883,10 @@ class MainViewModel: ObservableObject {
         videoFiles[index].status = .pending
         videoFiles[index].compressionProgress = 0.0
         
-        loggingService.info("Повторная попытка сжатия файла: \(videoFiles[index].name)", category: "Compression")
+        loggingService.info(
+            String(format: NSLocalizedString("Повторная попытка сжатия файла: %@", comment: ""), videoFiles[index].name),
+            category: "Compression"
+        )
         
         // Start compression
         compressFile(withId: fileId)
@@ -704,8 +899,10 @@ class MainViewModel: ObservableObject {
         
         // Clear the list
         videoFiles.removeAll()
+        videoFileIndexById.removeAll()
+        inputURLSet.removeAll()
         
-        loggingService.info("Очищен список файлов", category: "FileManagement")
+        loggingService.info(NSLocalizedString("Очищен список файлов", comment: ""), category: "FileManagement")
     }
     
     /// Toggle the logs window visibility
@@ -713,10 +910,77 @@ class MainViewModel: ObservableObject {
         showLogs.toggle()
         
         if showLogs {
-            loggingService.info("Открыто окно логов", category: "UI")
+            loggingService.info(NSLocalizedString("Открыто окно логов", comment: ""), category: "UI")
         } else {
-            loggingService.info("Закрыто окно логов", category: "UI")
+            loggingService.info(NSLocalizedString("Закрыто окно логов", comment: ""), category: "UI")
         }
+    }
+}
+
+// MARK: - Index Cache
+
+extension MainViewModel {
+    private func indexForFileId(_ id: UUID) -> Int? {
+        if let index = videoFileIndexById[id],
+           index < videoFiles.count,
+           videoFiles[index].id == id {
+            return index
+        }
+        
+        if let index = videoFiles.firstIndex(where: { $0.id == id }) {
+            videoFileIndexById[id] = index
+            return index
+        }
+        
+        return nil
+    }
+    
+    private func rebuildIndexCache(from startIndex: Int) {
+        guard startIndex < videoFiles.count else { return }
+        for index in startIndex..<videoFiles.count {
+            videoFileIndexById[videoFiles[index].id] = index
+        }
+    }
+    
+    private func recomputeAggregates() {
+        var counts: [StatusBucket: Int] = [.pending: 0, .compressing: 0, .completed: 0, .failed: 0]
+        var failedCounts: [String: Int] = [:]
+        var totalOriginal: Int64 = 0
+        var totalCompressed: Int64 = 0
+        var completedOriginal: Int64 = 0
+        var completedCompressed: Int64 = 0
+        
+        for file in videoFiles {
+            totalOriginal += file.originalSize
+            if let compressedSize = file.compressedSize {
+                totalCompressed += compressedSize
+            }
+            
+            switch file.status {
+            case .pending:
+                counts[.pending, default: 0] += 1
+            case .compressing:
+                counts[.compressing, default: 0] += 1
+            case .completed:
+                counts[.completed, default: 0] += 1
+                completedOriginal += file.originalSize
+                if let compressedSize = file.compressedSize {
+                    completedCompressed += compressedSize
+                }
+            case .failed:
+                counts[.failed, default: 0] += 1
+                if case .failed(let error) = file.status {
+                    failedCounts[error.localizedDescription, default: 0] += 1
+                }
+            }
+        }
+        
+        statusCounts = counts
+        failedStatusCountsByError = failedCounts
+        cachedTotalOriginalSize = totalOriginal
+        cachedTotalCompressedSize = totalCompressed
+        cachedCompletedOriginalSize = completedOriginal
+        cachedCompletedCompressedSize = completedCompressed
     }
 }
 
@@ -731,7 +995,7 @@ extension MainViewModel {
                 ffmpegService: ffmpegService,
                 fileManagerService: FileManagerService(),
                 settingsService: settingsService,
-                loggingService: LoggingService(),
+                loggingService: LoggingService.shared,
                 performanceMonitor: PerformanceMonitorService.shared
             )
         } catch {
@@ -741,7 +1005,7 @@ extension MainViewModel {
                 ffmpegService: fallbackFFmpegService,
                 fileManagerService: FileManagerService(),
                 settingsService: settingsService,
-                loggingService: LoggingService(),
+                loggingService: LoggingService.shared,
                 performanceMonitor: PerformanceMonitorService.shared
             )
 

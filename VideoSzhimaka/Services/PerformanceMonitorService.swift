@@ -13,6 +13,8 @@ class PerformanceMonitorService: ObservableObject {
     private let logger = Logger(subsystem: "com.videoszhimaka.VideoSzhimaka", category: "Performance")
     private var monitoringTimer: Timer?
     private var isMonitoring = false
+    private var lastCPULoadInfo: host_cpu_load_info_data_t?
+    private let cpuLock = NSLock()
     
     private init() {
         setupThermalStateMonitoring()
@@ -134,16 +136,25 @@ class PerformanceMonitorService: ObservableObject {
             return 0.0
         }
 
-        let user = Double(cpuLoadInfo.cpu_ticks.0)
-        let system = Double(cpuLoadInfo.cpu_ticks.1)
-        let idle = Double(cpuLoadInfo.cpu_ticks.2)
-        let nice = Double(cpuLoadInfo.cpu_ticks.3)
-
-        let totalTicks = user + system + idle + nice
-        guard totalTicks > 0 else { return 0.0 }
-
-        let activeTicks = user + system + nice
-        return (activeTicks / totalTicks) * 100.0
+        cpuLock.lock()
+        let previous = lastCPULoadInfo
+        lastCPULoadInfo = cpuLoadInfo
+        cpuLock.unlock()
+        
+        guard let previousLoad = previous else {
+            return 0.0
+        }
+        
+        let userDiff = Double(cpuLoadInfo.cpu_ticks.0 - previousLoad.cpu_ticks.0)
+        let systemDiff = Double(cpuLoadInfo.cpu_ticks.1 - previousLoad.cpu_ticks.1)
+        let idleDiff = Double(cpuLoadInfo.cpu_ticks.2 - previousLoad.cpu_ticks.2)
+        let niceDiff = Double(cpuLoadInfo.cpu_ticks.3 - previousLoad.cpu_ticks.3)
+        
+        let totalDiff = userDiff + systemDiff + idleDiff + niceDiff
+        guard totalDiff > 0 else { return 0.0 }
+        
+        let activeDiff = userDiff + systemDiff + niceDiff
+        return (activeDiff / totalDiff) * 100.0
     }
     
     private func getMemoryUsage() -> Double {
@@ -191,15 +202,15 @@ extension ProcessInfo.ThermalState {
     var description: String {
         switch self {
         case .nominal:
-            return "Нормальная"
+            return NSLocalizedString("Нормальная", comment: "")
         case .fair:
-            return "Умеренная"
+            return NSLocalizedString("Умеренная", comment: "")
         case .serious:
-            return "Высокая"
+            return NSLocalizedString("Высокая", comment: "")
         case .critical:
-            return "Критическая"
+            return NSLocalizedString("Критическая", comment: "")
         @unknown default:
-            return "Неизвестная"
+            return NSLocalizedString("Неизвестная", comment: "")
         }
     }
 }

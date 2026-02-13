@@ -8,7 +8,9 @@ final class LoggingServiceTests: XCTestCase {
     // Хелпер: дождаться выполнения задач в главной очереди (для асинхронного добавления логов)
     func flushMainQueue() {
         let exp = expectation(description: "flush main queue")
-        DispatchQueue.main.async { exp.fulfill() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            exp.fulfill()
+        }
         wait(for: [exp], timeout: 1.0)
     }
     
@@ -133,6 +135,23 @@ final class LoggingServiceTests: XCTestCase {
         XCTAssertTrue(formattedMessage.contains("[INFO]"))
         XCTAssertTrue(formattedMessage.contains("[Test]"))
         XCTAssertFalse(formattedTimestamp.isEmpty)
+    }
+
+    func testLogEntryFormattingPerformance() {
+        let entry = LogEntry(
+            timestamp: Date(),
+            level: .info,
+            message: "Test message",
+            category: "Test"
+        )
+
+        measure {
+            var totalLength = 0
+            for _ in 0..<10_000 {
+                totalLength += entry.formattedMessage.count
+            }
+            XCTAssertGreaterThan(totalLength, 0)
+        }
     }
     
     func testLogLevelDisplayNames() {

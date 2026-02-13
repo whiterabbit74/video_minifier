@@ -155,13 +155,14 @@ class MockFileManagerService: FileManagerServiceProtocol {
     var fileSizeResult: Result<Int64, Error> = .success(1024 * 1024) // 1MB
     var fileSizeResults: [URL: Result<Int64, Error>] = [:]
     var deleteFileResult: Result<Void, Error> = .success(())
+    var moveFileResult: Result<Void, Error> = .success(())
     var fileExistsResult = true
     var fileExistsResults: [String: Bool] = [:]
     var openInFinderCallCount = 0
     var deletedFiles: [URL] = []
     var openedInFinderURLs: [URL] = []
     
-    func generateOutputURL(for inputURL: URL) -> URL {
+    func generateOutputURL(for inputURL: URL, behavior: OutputBehavior) -> URL {
         return generateOutputURLResult
     }
     
@@ -189,6 +190,15 @@ class MockFileManagerService: FileManagerServiceProtocol {
         switch deleteFileResult {
         case .success:
             deletedFiles.append(url)
+        case .failure(let error):
+            throw error
+        }
+    }
+
+    func moveFile(from sourceURL: URL, to destinationURL: URL) throws {
+        switch moveFileResult {
+        case .success:
+            deletedFiles.append(destinationURL)
         case .failure(let error):
             throw error
         }
