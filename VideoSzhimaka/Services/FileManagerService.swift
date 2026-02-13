@@ -75,7 +75,7 @@ final class FileManagerService: FileManagerServiceProtocol {
             }
             try fileManager.moveItem(at: sourceURL, to: destinationURL)
         } catch {
-            throw FileManagerError.deletionFailed(destinationURL, error)
+            throw FileManagerError.moveFailed(sourceURL, destinationURL, error)
         }
     }
     

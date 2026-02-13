@@ -51,9 +51,14 @@ class PerformanceMonitorService: ObservableObject {
     
     /// Get current system performance metrics
     func getCurrentMetrics() -> PerformanceMetrics {
+        let memoryUsageMB = getMemoryUsageMB()
+        let physicalMemoryMB = Double(ProcessInfo.processInfo.physicalMemory) / (1024.0 * 1024.0)
+        let memoryPressurePercent = physicalMemoryMB > 0 ? (memoryUsageMB / physicalMemoryMB) * 100.0 : 0.0
+
         return PerformanceMetrics(
             cpuUsage: getCPUUsage(),
-            memoryUsage: getMemoryUsage(),
+            memoryUsage: memoryUsageMB,
+            memoryPressurePercent: memoryPressurePercent,
             thermalState: ProcessInfo.processInfo.thermalState,
             timestamp: Date()
         )
@@ -77,7 +82,7 @@ class PerformanceMonitorService: ObservableObject {
         }
         
         // Adjust based on memory usage
-        if metrics.memoryUsage > 80 {
+        if metrics.memoryPressurePercent > 80 {
             recommendations.suggestMemoryOptimization = true
         }
         
@@ -113,7 +118,7 @@ class PerformanceMonitorService: ObservableObject {
     private func updatePerformanceMetrics() {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let cpuUsage = self?.getCPUUsage() ?? 0.0
-            let memoryUsage = self?.getMemoryUsage() ?? 0.0
+            let memoryUsage = self?.getMemoryUsageMB() ?? 0.0
             
             DispatchQueue.main.async {
                 self?.currentCPUUsage = cpuUsage
@@ -157,7 +162,7 @@ class PerformanceMonitorService: ObservableObject {
         return (activeDiff / totalDiff) * 100.0
     }
     
-    private func getMemoryUsage() -> Double {
+    private func getMemoryUsageMB() -> Double {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
         
@@ -182,7 +187,8 @@ class PerformanceMonitorService: ObservableObject {
 
 struct PerformanceMetrics {
     let cpuUsage: Double
-    let memoryUsage: Double
+    let memoryUsage: Double // MB
+    let memoryPressurePercent: Double
     let thermalState: ProcessInfo.ThermalState
     let timestamp: Date
 }

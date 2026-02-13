@@ -38,6 +38,7 @@ protocol FileManagerServiceProtocol {
 enum FileManagerError: LocalizedError {
     case fileNotFound(URL)
     case deletionFailed(URL, Error)
+    case moveFailed(URL, URL, Error)
     case sizeCalculationFailed(URL, Error)
     case invalidURL(URL)
     
@@ -47,6 +48,13 @@ enum FileManagerError: LocalizedError {
             return String(format: NSLocalizedString("Файл не найден: %@", comment: ""), url.lastPathComponent)
         case .deletionFailed(let url, let error):
             return String(format: NSLocalizedString("Не удалось удалить файл %@: %@", comment: ""), url.lastPathComponent, error.localizedDescription)
+        case .moveFailed(let sourceURL, let destinationURL, let error):
+            return String(
+                format: NSLocalizedString("Не удалось переместить файл %@ в %@: %@", comment: ""),
+                sourceURL.lastPathComponent,
+                destinationURL.lastPathComponent,
+                error.localizedDescription
+            )
         case .sizeCalculationFailed(let url, let error):
             return String(format: NSLocalizedString("Не удалось получить размер файла %@: %@", comment: ""), url.lastPathComponent, error.localizedDescription)
         case .invalidURL(let url):

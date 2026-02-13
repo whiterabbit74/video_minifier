@@ -1,6 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
+import Darwin
 
 struct ContentView: View {
     @EnvironmentObject private var settingsService: SettingsService
@@ -423,9 +424,12 @@ private struct StoredSidebarPreset: Codable, Identifiable {
 
 private final class FolderDirectoryWatcher {
     private let queue = DispatchQueue(label: "video.folder.monitor.watcher")
-    private var timer: DispatchSourceTimer?
+    private var source: DispatchSourceFileSystemObject?
+    private var folderFileDescriptor: CInt = -1
     private var knownPaths: Set<String> = []
     private var folderURL: URL?
+    private var onKnownPathsChanged: ((Set<String>) -> Void)?
+    private var onNewFiles: (([URL]) -> Void)?
 
     func start(
         folderURL: URL,
@@ -442,6 +446,8 @@ private final class FolderDirectoryWatcher {
         let initialPaths = Set(initialFiles.map { $0.path })
         let initialNewPaths = initialPaths.subtracting(initialKnownPaths)
         knownPaths = initialPaths
+        self.onKnownPathsChanged = onKnownPathsChanged
+        self.onNewFiles = onNewFiles
         onKnownPathsChanged(initialPaths)
 
         if !initialNewPaths.isEmpty {
@@ -453,36 +459,77 @@ private final class FolderDirectoryWatcher {
             }
         }
 
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 2.0, repeating: 2.0)
-        timer.setEventHandler { [weak self] in
-            guard let self, let folder = self.folderURL else { return }
-
-            let currentFiles = self.scanVideoFiles(in: folder)
-            let currentPaths = Set(currentFiles.map { $0.path })
-            let newPaths = currentPaths.subtracting(self.knownPaths)
-            self.knownPaths = currentPaths
-            onKnownPathsChanged(currentPaths)
-
-            guard !newPaths.isEmpty else { return }
-
-            let newFiles = currentFiles
-                .filter { newPaths.contains($0.path) }
-                .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-
-            DispatchQueue.main.async {
-                onNewFiles(newFiles)
-            }
-        }
-        self.timer = timer
-        timer.resume()
+        startFileSystemEventMonitoring(for: canonicalFolderURL)
     }
 
     func stop() {
-        timer?.cancel()
-        timer = nil
+        source?.setEventHandler {}
+        source?.setCancelHandler {}
+        source?.cancel()
+        source = nil
+
+        if folderFileDescriptor >= 0 {
+            close(folderFileDescriptor)
+            folderFileDescriptor = -1
+        }
+
         knownPaths.removeAll()
         folderURL = nil
+        onKnownPathsChanged = nil
+        onNewFiles = nil
+    }
+
+    private func startFileSystemEventMonitoring(for folderURL: URL) {
+        let descriptor = open(folderURL.path, O_EVTONLY)
+        guard descriptor >= 0 else {
+            // If event monitor cannot be created, keep initial snapshot only.
+            return
+        }
+
+        folderFileDescriptor = descriptor
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .rename, .delete, .extend, .attrib, .link, .revoke],
+            queue: queue
+        )
+
+        source.setEventHandler { [weak self] in
+            self?.refreshSnapshot()
+        }
+
+        source.setCancelHandler { [weak self] in
+            guard let self else { return }
+            if self.folderFileDescriptor >= 0 {
+                close(self.folderFileDescriptor)
+                self.folderFileDescriptor = -1
+            }
+        }
+
+        self.source = source
+        source.resume()
+    }
+
+    private func refreshSnapshot() {
+        guard let folder = folderURL else { return }
+
+        let currentFiles = scanVideoFiles(in: folder)
+        let currentPaths = Set(currentFiles.map { $0.path })
+        let newPaths = currentPaths.subtracting(knownPaths)
+        knownPaths = currentPaths
+
+        onKnownPathsChanged?(currentPaths)
+
+        guard !newPaths.isEmpty else { return }
+
+        let newFiles = currentFiles
+            .filter { newPaths.contains($0.path) }
+            .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
+
+        guard !newFiles.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.onNewFiles?(newFiles)
+        }
     }
 
     private func scanVideoFiles(in folderURL: URL) -> [URL] {
