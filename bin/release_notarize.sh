@@ -12,7 +12,7 @@ set -euo pipefail
 # Notes:
 # - Run on macOS with Xcode CLT installed.
 # - The script will sign any embedded ffmpeg at Resources/ffmpeg and Resources/bin/ffmpeg if present.
-# - Hardened Runtime is enabled. Entitlements are taken from VideoSzhimaka/VideoSzhimaka.entitlements if available next to this script.
+# - Hardened Runtime is enabled. Entitlements are taken from VideoMinifier/VideoMinifier.entitlements if available next to this script.
 
 APP_PATH=${1:-}
 DEV_ID=${2:-}
@@ -32,7 +32,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENTITLEMENTS_PATH="$REPO_ROOT/VideoSzhimaka/VideoSzhimaka.entitlements"
+ENTITLEMENTS_PATH="$REPO_ROOT/VideoMinifier/VideoMinifier.entitlements"
 
 if [[ ! -f "$ENTITLEMENTS_PATH" ]]; then
   echo "Entitlements not found at $ENTITLEMENTS_PATH. Proceeding without entitlements." >&2

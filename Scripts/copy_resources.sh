@@ -1,7 +1,7 @@
 #!/bin/sh
 set -euo pipefail
 
-RES_SRC="${SRCROOT}/VideoSzhimaka/Resources"
+RES_SRC="${SRCROOT}/VideoMinifier/Resources"
 RES_DST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 
 for dir in "$RES_SRC"/*.lproj; do
