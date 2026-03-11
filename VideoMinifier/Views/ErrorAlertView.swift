@@ -6,8 +6,17 @@ struct ErrorAlertModifier: ViewModifier {
     let onRetry: (() -> Void)?
     
     func body(content: Content) -> some View {
+        let isPresented = Binding<Bool>(
+            get: { error != nil },
+            set: { newValue in
+                if !newValue {
+                    error = nil
+                }
+            }
+        )
+
         content
-            .alert(NSLocalizedString("Ошибка", comment: ""), isPresented: .constant(error != nil)) {
+            .alert(NSLocalizedString("Ошибка", comment: ""), isPresented: isPresented) {
                 if let error = error {
                     if error.isRetryable && onRetry != nil {
                         Button(NSLocalizedString("Повторить", comment: "")) {

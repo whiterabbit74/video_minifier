@@ -75,11 +75,7 @@ struct MainView: View {
         .onDrop(of: [UTType.fileURL], isTargeted: .constant(false)) { providers in
             viewModel.handleDrop(providers)
         }
-        .errorAlert(error: $viewModel.currentError) {
-            if let error = viewModel.currentError, error.isRetryable {
-                _ = error
-            }
-        }
+        .errorAlert(error: $viewModel.currentError)
         .alert(NSLocalizedString("Ошибки при обработке", comment: ""), isPresented: $viewModel.showBatchErrorsAlert) {
             if viewModel.batchErrors.contains(where: { $0.isRetryable }) {
                 Button(NSLocalizedString("Повторить все", comment: "")) {
@@ -434,6 +430,7 @@ private final class FolderDirectoryWatcher {
     func start(
         folderURL: URL,
         initialKnownPaths: Set<String>,
+        emitInitialNewFiles: Bool,
         onKnownPathsChanged: @escaping (Set<String>) -> Void,
         onNewFiles: @escaping ([URL]) -> Void
     ) {
@@ -444,7 +441,7 @@ private final class FolderDirectoryWatcher {
 
         let initialFiles = scanVideoFiles(in: canonicalFolderURL)
         let initialPaths = Set(initialFiles.map { $0.path })
-        let initialNewPaths = initialPaths.subtracting(initialKnownPaths)
+        let initialNewPaths = emitInitialNewFiles ? initialPaths.subtracting(initialKnownPaths) : []
         knownPaths = initialPaths
         self.onKnownPathsChanged = onKnownPathsChanged
         self.onNewFiles = onNewFiles
@@ -744,13 +741,21 @@ private final class FolderMonitorViewModel: ObservableObject {
         }
     }
 
-    private func persistedKnownPaths(for folderPath: String) -> Set<String> {
+    private struct PersistedKnownPaths {
+        let paths: Set<String>
+        let hasSnapshot: Bool
+    }
+
+    private func persistedKnownPaths(for folderPath: String) -> PersistedKnownPaths {
         let normalized = URL(fileURLWithPath: folderPath).standardizedFileURL.path
         let savedFolder = UserDefaults.standard.string(forKey: Keys.knownPathsFolder)
-        guard savedFolder == normalized else { return [] }
+        guard savedFolder == normalized else {
+            return PersistedKnownPaths(paths: [], hasSnapshot: false)
+        }
 
-        let savedList = UserDefaults.standard.array(forKey: Keys.knownPathsList) as? [String] ?? []
-        return Set(savedList)
+        let savedList = UserDefaults.standard.array(forKey: Keys.knownPathsList) as? [String]
+        let hasSnapshot = savedList != nil
+        return PersistedKnownPaths(paths: Set(savedList ?? []), hasSnapshot: hasSnapshot)
     }
 
     private func persistKnownPaths(_ paths: Set<String>, for folderPath: String) {
@@ -780,11 +785,12 @@ private final class FolderMonitorViewModel: ObservableObject {
             return
         }
 
-        let rememberedPaths = persistedKnownPaths(for: monitoredFolderPath)
+        let remembered = persistedKnownPaths(for: monitoredFolderPath)
 
         watcher.start(
             folderURL: folderURL,
-            initialKnownPaths: rememberedPaths,
+            initialKnownPaths: remembered.paths,
+            emitInitialNewFiles: remembered.hasSnapshot,
             onKnownPathsChanged: { [weak self] updatedPaths in
                 guard let self else { return }
                 self.persistKnownPaths(updatedPaths, for: self.monitoredFolderPath)
